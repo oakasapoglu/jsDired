@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<!-- jsDired Mix v1.0 -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>jsDired · Emacs‑faithful file manager</title>
+    <!-- Tokyo Night + JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            user-select: none;
+        }
+
+        body {
+            --bg: #1a1b26;
+            --bg-dark: #16161e;
+            --fg: #a9b1d6;
+            --fg-dim: #565f89;
+            --blue: #7aa2f7;
+            --cyan: #7dcfff;
+            --green: #9ece6a;
+            --orange: #ff9e64;
+            --red: #f7768e;
+            --magenta: #bb9af7;
+            --cursor-bg: #3b4261;
+            --border: #292e42;
+            
+            background: var(--bg);
+            color: var(--fg);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 15px;
+            line-height: 1.5;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ----- LANDING OVERLAY ----- */
+        #landing-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-dark);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+        .landing-card {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2.5rem 3rem;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+        }
+        .landing-card h1 {
+            font-weight: 700;
+            font-size: 2.2rem;
+            color: var(--cyan);
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.5px;
+        }
+        .landing-card p {
+            color: var(--fg-dim);
+            margin-bottom: 2rem;
+        }
+        .grant-btn {
+            background: var(--blue);
+            color: #0f0f14;
+            border: none;
+            font-family: inherit;
+            font-weight: bold;
+            font-size: 1.2rem;
+            padding: 0.8rem 2.5rem;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: 0.15s;
+            box-shadow: 0 4px 10px rgba(122,162,247,0.2);
+        }
+        .grant-btn:hover {
+            background: #89b4ff;
+            transform: scale(1.02);
+        }
+
+        /* ----- MAIN APP (hidden until access) ----- */
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        #app.visible {
+            opacity: 1;
+        }
+
+        /* HEADER */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 16px;
+            background: var(--bg-dark);
+            border-bottom: 1px solid var(--border);
+            color: var(--fg-dim);
+            font-size: 0.9rem;
+        }
+        .path-breadcrumb {
+            color: var(--blue);
+        }
+        .app-title {
+            color: var(--cyan);
+            font-weight: bold;
+        }
+
+        /* COLUMN HEADERS */
+        .column-headers {
+            display: flex;
+            padding: 6px 16px 6px 28px;  /* left space for mark column */
+            background: var(--bg-dark);
+            border-bottom: 1px solid var(--border);
+            color: var(--fg-dim);
+            font-weight: 700;
+            font-size: 0.85rem;
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+        .col-mark-header { width: 28px; text-align: center; }
+        .col-name-header { flex: 1; }
+        .col-size-header { width: 90px; text-align: right; }
+        .col-modified-header { width: 140px; text-align: right; }
+
+        /* ENTRY LIST */
+        .entry-list {
+            flex: 1;
+            overflow-y: auto;
+            padding-bottom: 4px;
+        }
+        .row {
+            display: flex;
+            align-items: center;
+            padding: 2px 16px 2px 0;
+            border-bottom: 1px solid transparent;
+            white-space: nowrap;
+            cursor: default;
+        }
+        .row-cursor {
+            background: var(--cursor-bg) !important;
+            font-weight: bold;
+        }
+        .col-mark {
+            width: 28px;
+            text-align: center;
+            color: var(--orange);
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .col-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding-right: 8px;
+        }
+        .col-size {
+            width: 90px;
+            text-align: right;
+            flex-shrink: 0;
+            color: var(--fg-dim);
+        }
+        .col-modified {
+            width: 140px;
+            text-align: right;
+            flex-shrink: 0;
+            color: var(--fg-dim);
+        }
+        /* entry types */
+        .type-directory { color: var(--blue); }
+        .type-special { color: var(--magenta); }
+        .mark-star { color: var(--orange); }
+        .mark-flag { color: var(--red); }
+
+        /* hidden columns when details off */
+        .hide-details .col-size-header,
+        .hide-details .col-modified-header,
+        .hide-details .col-size,
+        .hide-details .col-modified {
+            display: none;
+        }
+        .hide-details .col-name {
+            flex: 1;
+        }
+
+        /* Icons (when enabled) */
+        .file-icon {
+            display: inline-block;
+            width: 1.8em;
+            text-align: center;
+            margin-right: 2px;
+        }
+
+        /* Minibuffer */
+        #minibuffer {
+            position: absolute;
+            bottom: 36px;
+            left: 16px;
+            right: 16px;
+            background: var(--bg-dark);
+            border: 1px solid var(--cyan);
+            border-radius: 6px;
+            padding: 8px 16px;
+            display: none;
+            align-items: center;
+            z-index: 30;
+            box-shadow: 0 -2px 15px rgba(0,0,0,0.7);
+        }
+        #minibuffer.visible { display: flex; }
+        .mini-prompt {
+            color: var(--cyan);
+            margin-right: 12px;
+            font-weight: bold;
+        }
+        #mini-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--fg);
+            font-family: inherit;
+            font-size: inherit;
+            outline: none;
+        }
+
+        /* Footer / Status Bar */
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 16px;
+            background: var(--bg-dark);
+            border-top: 1px solid var(--border);
+            font-size: 0.85rem;
+            color: var(--fg-dim);
+        }
+        .mode-pill {
+            padding: 2px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        .mode-normal { background: var(--green); color: #0f0f14; }
+        .mode-dired { background: var(--orange); color: #0f0f14; }
+
+        /* Toast container */
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .toast {
+            background: var(--bg-dark);
+            border-left: 5px solid var(--blue);
+            padding: 12px 24px;
+            border-radius: 6px;
+            color: var(--fg);
+            box-shadow: 0 8px 20px #00000055;
+            animation: slideIn 0.2s;
+            font-weight: 500;
+        }
+        .toast.success { border-left-color: var(--green); }
+        .toast.error { border-left-color: var(--red); }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+
+        /* Loading overlay (spinner) */
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: #0f0f14cc;
+            backdrop-filter: blur(3px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 500;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid var(--border);
+            border-top-color: var(--cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Help overlay */
+        #help-overlay {
+            position: fixed;
+            inset: 0;
+            background: #0b0b10ee;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 800;
+        }
+        .help-panel {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px 32px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: var(--fg);
+        }
+        .help-panel h2 { color: var(--cyan); }
+        .key { color: var(--orange); font-weight: bold; }
+    </style>
+</head>
+<body>
+<div id="landing-overlay">
+    <div class="landing-card">
+        <h1>📁 jsDired</h1>
+        <p>Emacs‑faithful · Tokyo Night · File System Access</p>
+        <button class="grant-btn" id="grant-access-btn">Grant Access</button>
+    </div>
+</div>
+
+<div id="app">
+    <div class="header">
+        <span class="path-breadcrumb" id="path-display">/</span>
+        <span class="app-title">jsDired <span id="sort-indicator">[name]</span></span>
+    </div>
+    <div class="column-headers" id="column-headers">
+        <div class="col-mark-header">M</div>
+        <div class="col-name-header">Name</div>
+        <div class="col-size-header">Size</div>
+        <div class="col-modified-header">Modified</div>
+    </div>
+    <div class="entry-list" id="entry-list"></div>
+
+    <div id="minibuffer">
+        <span class="mini-prompt" id="mini-prompt">></span>
+        <input type="text" id="mini-input" spellcheck="false" autocomplete="off" />
+    </div>
+
+    <div class="footer">
+        <span id="stats-left">0 entries · 0 marked · 0 flagged</span>
+        <span id="status-right">
+            <span id="mode-badge" class="mode-pill mode-normal">NORMAL</span>
+            <span id="clipboard-status"></span>
+        </span>
+    </div>
+</div>
+
+<div id="toast-container"></div>
+
+<div id="loading-overlay"><div class="spinner"></div><span style="margin-left: 20px; color:var(--fg);">Working…</span></div>
+
+<div id="help-overlay" onclick="if(event.target===this) this.style.display='none'">
+    <div class="help-panel">
+        <h2>⌨️ Keybindings</h2>
+        <p><span class="key">j/↓</span> down · <span class="key">k/↑</span> up · <span class="key">S-Enter</span> parent</p>
+        <p><span class="key">m/SPC</span> toggle mark · <span class="key">u</span> unmark · <span class="key">U</span> unmark all · <span class="key">d</span> flag delete · <span class="key">x</span> execute delete</p>
+        <p><span class="key">+</span> new dir · <span class="key">'</span> new file · <span class="key">R</span> rename/move</p>
+        <p><span class="key">y/C</span> copy · <span class="key">M</span> move · <span class="key">p</span> paste</p>
+        <p><span class="key">/</span> regex filter · <span class="key">s</span> cycle sort · <span class="key">g</span> refresh</p>
+        <p><span class="key">(</span> details · <span class="key">)</span> icons · <span class="key">0</span> omit hidden</p>
+        <p><span class="key">W</span> browse file · <span class="key">?</span> help · <span class="key">q</span> quit</p>
+        <p style="margin-top:16px;color:var(--fg-dim)">Click outside to close</p>
+    </div>
+</div>
+
+<script>
+    (function(){
+        "use strict";
+
+        // ---------- Tokyo Night ----------
+        const STYLES = document.documentElement.style;
+
+        // ---------- Utilities ----------
+        const escapeHtml = (text) => {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        };
+
+        const formatSize = (bytes) => {
+            if (bytes === null || bytes === undefined) return '-';
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const units = ['B','KB','MB','GB'];
+            let i = Math.floor(Math.log(bytes) / Math.log(k));
+            return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + units[i];
+        };
+
+        const formatMtime = (mtime) => {
+            if (!mtime) return '-';
+            const d = new Date(mtime);
+            return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' }) + ' ' +
+                   d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+        };
+
+        // ---------- Toast ----------
+        const showToast = (msg, type='info') => {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        };
+
+        // ---------- Main Dired Class ----------
+        class Dired {
+            constructor() {
+                this.rootHandle = null;
+                this.currentHandle = null;
+                this.pathSegments = [];        // [{handle, name}]
+                this.entries = [];
+                this.cursorIndex = 0;
+                this.marked = new Set();        // names
+                this.flagged = new Set();
+                this.clipboard = null;           // {action, items, sourceHandle}
+                this.filterRegex = null;
+                this.sortBy = 'name';            // 'name','size','mtime'
+                
+                this.loading = false;
+                this.loadingTimer = null;
+                this.isInputActive = false;
+                this.inputCallback = null;
+                
+                // UI toggles
+                this.detailsEnabled = false;     // default OFF
+                this.iconsEnabled = true;        // default ON
+                this.omitDotfiles = true;        // default ON (hide dotfiles)
+
+                // DOM elements
+                this.appEl = document.getElementById('app');
+                this.listEl = document.getElementById('entry-list');
+                this.pathDisplay = document.getElementById('path-display');
+                this.statsLeft = document.getElementById('stats-left');
+                this.modeBadge = document.getElementById('mode-badge');
+                this.clipboardStatus = document.getElementById('clipboard-status');
+                this.sortIndicator = document.getElementById('sort-indicator');
+                this.mini = document.getElementById('minibuffer');
+                this.miniInput = document.getElementById('mini-input');
+                this.miniPrompt = document.getElementById('mini-prompt');
+                this.loadingOverlay = document.getElementById('loading-overlay');
+                
+                this.initEventListeners();
+            }
+
+            initEventListeners() {
+                window.addEventListener('keydown', (e) => this.handleGlobalKey(e));
+                document.getElementById('grant-access-btn').addEventListener('click', () => this.requestDirectory());
+                this.miniInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { this.acceptMini(); e.preventDefault(); }
+                    else if (e.key === 'Escape') { this.cancelMini(); e.preventDefault(); }
+                });
+            }
+
+            // ---------- BOOT ----------
+            async requestDirectory() {
+                try {
+                    let handle;
+                    try {
+                        handle = await window.showDirectoryPicker({ startIn: 'downloads', mode: 'readwrite' });
+                    } catch {
+                        handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                    }
+                    this.rootHandle = handle;
+                    this.currentHandle = handle;
+                    this.pathSegments = [{ handle, name: handle.name }];
+                    document.getElementById('landing-overlay').style.display = 'none';
+                    this.appEl.classList.add('visible');
+                    await this.refreshDirectory();
+                } catch (err) {
+                    if (err.name !== 'AbortError') showToast('Access denied: ' + err.message, 'error');
+                    else showToast('Directory selection cancelled', 'info');
+                }
+            }
+
+            // ---------- LOADING GUARD ----------
+            setLoading(flag) {
+                if (flag) {
+                    this.loadingTimer = setTimeout(() => {
+                        this.loadingOverlay.style.display = 'flex';
+                    }, 180);
+                } else {
+                    clearTimeout(this.loadingTimer);
+                    this.loadingOverlay.style.display = 'none';
+                }
+                this.loading = flag;
+            }
+
+            // ---------- REFRESH (revert-buffer) ----------
+            async refreshDirectory() {
+                if (this.loading) return;
+                this.setLoading(true);
+                try {
+                    // clear filter on directory change? done when entering new dir, but also on manual refresh we keep filter? spec says clear on dir change, but refresh should keep? we follow: only clear on cd.
+                    const raw = [];
+                    // . (current)
+                    raw.push({ handle: this.currentHandle, name: '.', kind: 'directory', isDot: true, isDotDot: false });
+                    // .. if not root
+                    if (this.pathSegments.length > 1) {
+                        const parentHandle = this.pathSegments[this.pathSegments.length-2].handle;
+                        raw.push({ handle: parentHandle, name: '..', kind: 'directory', isDot: false, isDotDot: true });
+                    }
+                    
+                    for await (const [name, handle] of this.currentHandle.entries()) {
+                        if (this.omitDotfiles && name.startsWith('.') && name !== '.' && name !== '..') continue;
+                        const stats = await this.getFileStats(handle);
+                        raw.push({ handle, name, kind: handle.kind, isDot: false, isDotDot: false, ...stats });
+                    }
+
+                    // filter regex
+                    let filtered = raw;
+                    if (this.filterRegex) {
+                        filtered = raw.filter(e => e.isDot || e.isDotDot || this.filterRegex.test(e.name));
+                    }
+
+                    // sort
+                    filtered = this.sortItems(filtered);
+                    this.entries = filtered;
+                    
+                    // clamp cursor
+                    if (this.cursorIndex >= this.entries.length) this.cursorIndex = Math.max(0, this.entries.length-1);
+                    if (this.entries.length === 0) this.cursorIndex = -1;
+                    
+                    this.render();
+                    this.updateStatus();
+                } catch (e) {
+                    showToast('Refresh failed: ' + e.message, 'error');
+                } finally {
+                    this.setLoading(false);
+                }
+            }
+
+            async getFileStats(handle) {
+                if (handle.kind === 'directory') return { size: null, mtime: null };
+                try {
+                    const file = await handle.getFile();
+                    return { size: file.size, mtime: file.lastModified };
+                } catch { return { size: 0, mtime: null }; }
+            }
+
+            sortItems(items) {
+                const dirsFirst = (a,b) => {
+                    if (a.isDot) return -1;
+                    if (b.isDot) return 1;
+                    if (a.isDotDot) return -1;
+                    if (b.isDotDot) return 1;
+                    if (a.kind === 'directory' && b.kind !== 'directory') return -1;
+                    if (a.kind !== 'directory' && b.kind === 'directory') return 1;
+                    return 0;
+                };
+                const sorted = [...items].sort((a,b) => {
+                    const dir = dirsFirst(a,b);
+                    if (dir !== 0) return dir;
+                    if (this.sortBy === 'name') return a.name.localeCompare(b.name);
+                    if (this.sortBy === 'size') return (b.size||0) - (a.size||0) || a.name.localeCompare(b.name);
+                    if (this.sortBy === 'mtime') return (b.mtime||0) - (a.mtime||0) || a.name.localeCompare(b.name);
+                    return 0;
+                });
+                return sorted;
+            }
+
+            // ---------- RENDER ----------
+            render() {
+                if (!this.listEl) return;
+                const clsDetails = this.detailsEnabled ? '' : 'hide-details';
+                this.listEl.innerHTML = '';
+                for (let i=0; i<this.entries.length; i++) {
+                    const e = this.entries[i];
+                    const row = document.createElement('div');
+                    row.className = `row ${i === this.cursorIndex ? 'row-cursor' : ''}`;
+                    
+                    // mark column
+                    const markDiv = document.createElement('div'); markDiv.className = 'col-mark';
+                    if (this.marked.has(e.name)) markDiv.textContent = '*', markDiv.classList.add('mark-star');
+                    else if (this.flagged.has(e.name)) markDiv.textContent = 'D', markDiv.classList.add('mark-flag');
+                    else markDiv.textContent = ' ';
+                    
+                    // name column
+                    const nameDiv = document.createElement('div'); nameDiv.className = 'col-name';
+                    let nameDisplay = escapeHtml(e.name);
+                    if (this.iconsEnabled) {
+                        let icon = '📄';
+                        if (e.kind === 'directory') icon = e.isDot || e.isDotDot ? '📁' : '📂';
+                        else if (/\.(png|jpg|jpeg|gif|svg|webp)$/i.test(e.name)) icon = '🖼️';
+                        else if (/\.(js|ts|jsx|tsx)$/i.test(e.name)) icon = '📜';
+                        else if (/\.(html|css)$/i.test(e.name)) icon = '🌐';
+                        else if (/\.(md|txt)$/i.test(e.name)) icon = '📝';
+                        nameDisplay = `<span class="file-icon">${icon}</span>` + nameDisplay;
+                    }
+                    if (e.kind === 'directory') nameDiv.classList.add('type-directory');
+                    if (e.isDot || e.isDotDot) nameDiv.classList.add('type-special');
+                    nameDiv.innerHTML = nameDisplay;
+                    
+                    // size
+                    const sizeDiv = document.createElement('div'); sizeDiv.className = 'col-size';
+                    sizeDiv.textContent = e.kind === 'directory' ? '-' : formatSize(e.size);
+                    
+                    // modified
+                    const modDiv = document.createElement('div'); modDiv.className = 'col-modified';
+                    modDiv.textContent = formatMtime(e.mtime);
+                    
+                    row.append(markDiv, nameDiv, sizeDiv, modDiv);
+                    this.listEl.appendChild(row);
+                }
+                document.getElementById('column-headers').className = `column-headers ${clsDetails}`;
+                this.listEl.className = `entry-list ${clsDetails}`;
+                this.updatePathDisplay();
+            }
+
+            updatePathDisplay() {
+                const names = this.pathSegments.map(s => s.name);
+                this.pathDisplay.textContent = names.join(' / ') || '/';
+            }
+
+            updateStatus() {
+                const total = this.entries.length;
+                const markedCnt = this.marked.size;
+                const flaggedCnt = this.flagged.size;
+                this.statsLeft.textContent = `${total} entries · ${markedCnt} marked · ${flaggedCnt} flagged`;
+                
+                const mode = (markedCnt>0 || flaggedCnt>0) ? 'DIRED' : 'NORMAL';
+                this.modeBadge.textContent = mode;
+                this.modeBadge.className = `mode-pill ${mode==='NORMAL'?'mode-normal':'mode-dired'}`;
+                
+                const clip = this.clipboard ? `${this.clipboard.action} ${this.clipboard.items.length} item(s)` : '';
+                this.clipboardStatus.textContent = clip ? `[${clip}]` : '';
+                
+                const sortMap = {name:'name', size:'size', mtime:'modified'};
+                this.sortIndicator.textContent = `[${sortMap[this.sortBy]}]`;
+            }
+
+            // ---------- NAVIGATION ----------
+            moveCursor(delta) {
+                if (this.entries.length===0) return;
+                this.cursorIndex = Math.min(this.entries.length-1, Math.max(0, this.cursorIndex+delta));
+                this.render();
+                this.scrollToCursor();
+            }
+            scrollToCursor() {
+                const rows = this.listEl.children;
+                if (rows[this.cursorIndex]) rows[this.cursorIndex].scrollIntoView({block:'nearest'});
+            }
+
+            async enterDirectory(entry) {
+                if (entry.kind !== 'directory') return this.browseFile(entry);
+                if (entry.isDot) { await this.refreshDirectory(); return; }
+                if (entry.isDotDot) { await this.goUp(); return; }
+                
+                this.filterRegex = null;
+                this.currentHandle = entry.handle;
+                this.pathSegments.push({ handle: entry.handle, name: entry.name });
+                await this.refreshDirectory();
+            }
+
+            async goUp() {
+                if (this.pathSegments.length <= 1) return;
+                this.filterRegex = null;
+                this.pathSegments.pop();
+                this.currentHandle = this.pathSegments[this.pathSegments.length-1].handle;
+                await this.refreshDirectory();
+            }
+
+            async browseFile(entry) {
+                if (entry.kind !== 'file') return;
+                try {
+                    const file = await entry.handle.getFile();
+                    const url = URL.createObjectURL(file);
+                    window.open(url, '_blank');
+                } catch { showToast('Cannot open file', 'error'); }
+            }
+
+            // ---------- MARK / FLAG ----------
+            toggleMark() {
+                const e = this.entries[this.cursorIndex];
+                if (!e || e.isDot || e.isDotDot) { showToast('Cannot mark special entries'); return; }
+                if (this.marked.has(e.name)) this.marked.delete(e.name);
+                else { this.marked.add(e.name); this.flagged.delete(e.name); }
+                this.moveCursor(1);
+                this.updateStatus(); this.render();
+            }
+            
+            unmarkCurrent() {
+                const e = this.entries[this.cursorIndex];
+                if (!e || e.isDot || e.isDotDot) return;
+                this.marked.delete(e.name); this.flagged.delete(e.name);
+                this.moveCursor(1);
+                this.updateStatus(); this.render();
+            }
+
+            unmarkAll() { this.marked.clear(); this.flagged.clear(); this.updateStatus(); this.render(); }
+
+            toggleFlag() {
+                const e = this.entries[this.cursorIndex];
+                if (!e || e.isDot || e.isDotDot) { showToast('Cannot flag special entries'); return; }
+                if (this.flagged.has(e.name)) this.flagged.delete(e.name);
+                else { this.flagged.add(e.name); this.marked.delete(e.name); }
+                this.moveCursor(1);
+                this.updateStatus(); this.render();
+            }
+
+            getOperationTargets() {
+                if (this.marked.size>0) return this.entries.filter(e => this.marked.has(e.name) && !e.isDot && !e.isDotDot);
+                const cur = this.entries[this.cursorIndex];
+                if (cur && !cur.isDot && !cur.isDotDot) return [cur];
+                return [];
+            }
+
+            // ---------- DELETE (x) ----------
+            async executeDelete() {
+                let targets = this.flagged.size ? this.entries.filter(e => this.flagged.has(e.name) && !e.isDot && !e.isDotDot) : this.getOperationTargets();
+                if (targets.length===0) { showToast('Nothing to delete'); return; }
+                if (!confirm(`Delete ${targets.length} item(s)?`)) return;
+                this.setLoading(true);
+                try {
+                    for (const t of targets) {
+                        try { await this.currentHandle.removeEntry(t.name, {recursive: true}); }
+                        catch(e) { showToast(`Failed: ${t.name}`, 'error'); }
+                    }
+                    this.marked.clear(); this.flagged.clear();
+                    await this.refreshDirectory();
+                } finally { this.setLoading(false); }
+            }
+
+            // ---------- CREATE ----------
+            openMini(prompt, defaultValue, callback) {
+                if (this.isInputActive) return;
+                this.isInputActive = true;
+                this.miniPrompt.textContent = prompt;
+                this.miniInput.value = defaultValue || '';
+                this.mini.classList.add('visible');
+                this.miniInput.focus();
+                if (defaultValue) this.miniInput.select();
+                this.inputCallback = callback;
+            }
+
+            acceptMini() {
+                const val = this.miniInput.value.trim();
+                this.closeMini();
+                if (this.inputCallback && val) this.inputCallback(val);
+            }
+            cancelMini() { this.closeMini(); }
+            closeMini() {
+                this.mini.classList.remove('visible');
+                this.isInputActive = false;
+                this.inputCallback = null;
+            }
+
+            async createItem(isDir) {
+                this.openMini(isDir?'New directory:':'New file:', '', async (name) => {
+                    try {
+                        if (isDir) await this.currentHandle.getDirectoryHandle(name, {create:true});
+                        else await this.currentHandle.getFileHandle(name, {create:true});
+                        await this.refreshDirectory();
+                    } catch(e) { showToast('Creation failed: '+e.message, 'error'); }
+                });
+            }
+
+            // ---------- RENAME / MOVE ----------
+            async renameOrMove() {
+                const targets = this.getOperationTargets();
+                if (targets.length === 0) return;
+                if (targets.length > 1) { this.clipboard = {action:'move', items:targets.map(t=>({handle:t.handle, name:t.name, kind:t.kind})), sourceHandle:this.currentHandle}; this.updateStatus(); showToast('Marked for move'); return; }
+                const single = targets[0];
+                this.openMini('Rename:', single.name, async (newName) => {
+                    if (newName === single.name) return;
+                    try {
+                        await single.handle.move(newName);
+                    } catch {
+                        // fallback copy+delete
+                        if (single.kind==='file') {
+                            const file = await single.handle.getFile();
+                            const newHandle = await this.currentHandle.getFileHandle(newName, {create:true});
+                            const writable = await newHandle.createWritable();
+                            await writable.write(file);
+                            await writable.close();
+                            await this.currentHandle.removeEntry(single.name);
+                        } else throw new Error('Directory rename across?');
+                    }
+                    await this.refreshDirectory();
+                });
+            }
+
+            // ---------- CLIPBOARD / PASTE ----------
+            yank(action) {
+                const targets = this.getOperationTargets();
+                if (!targets.length) { showToast('No targets'); return; }
+                this.clipboard = { action, items: targets.map(t=>({handle:t.handle, name:t.name, kind:t.kind})), sourceHandle: this.currentHandle };
+                this.updateStatus();
+                showToast(`${action} ${targets.length} item(s)`);
+            }
+
+            async pasteItems() {
+                if (!this.clipboard || !this.clipboard.items.length) { showToast('Clipboard empty'); return; }
+                const {action, items, sourceHandle} = this.clipboard;
+                if (action==='move' && sourceHandle === this.currentHandle) { showToast('Move within same directory — use rename', 'error'); return; }
+                this.setLoading(true);
+                try {
+                    for (const item of items) {
+                        let destName = item.name;
+                        try {
+                            if (action==='copy' && sourceHandle === this.currentHandle) destName = `copy_of_${item.name}`;
+                            if (item.kind === 'directory') await this.recursiveCopy(item.handle, this.currentHandle, destName);
+                            else {
+                                const file = await item.handle.getFile();
+                                const newHandle = await this.currentHandle.getFileHandle(destName, {create:true});
+                                const writable = await newHandle.createWritable();
+                                await writable.write(file);
+                                await writable.close();
+                            }
+                            if (action==='move') await sourceHandle.removeEntry(item.name, {recursive:true});
+                        } catch(e) { showToast(`Failed ${item.name}`, 'error'); }
+                    }
+                    if (action==='move') this.clipboard = null;
+                    await this.refreshDirectory();
+                } finally { this.setLoading(false); }
+            }
+
+            async recursiveCopy(srcHandle, destParent, newName) {
+                const destDir = await destParent.getDirectoryHandle(newName, {create:true});
+                for await (const [name, handle] of srcHandle.entries()) {
+                    if (handle.kind === 'directory') await this.recursiveCopy(handle, destDir, name);
+                    else {
+                        const file = await handle.getFile();
+                        const fileHandle = await destDir.getFileHandle(name, {create:true});
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(file);
+                        await writable.close();
+                    }
+                }
+            }
+
+            // ---------- FILTER ----------
+            openFilter() {
+                this.openMini('Filter (regex):', this.filterRegex?.source || '', (val) => {
+                    try { this.filterRegex = val ? new RegExp(val, 'i') : null; }
+                    catch { showToast('Invalid regex', 'error'); return; }
+                    this.refreshDirectory();
+                });
+            }
+
+            // ---------- TOGGLES ----------
+            toggleDetails() { this.detailsEnabled = !this.detailsEnabled; this.render(); }
+            toggleIcons() { this.iconsEnabled = !this.iconsEnabled; this.render(); }
+            toggleOmit() { this.omitDotfiles = !this.omitDotfiles; this.refreshDirectory(); }
+
+            cycleSort() {
+                const order = ['name','size','mtime'];
+                let idx = order.indexOf(this.sortBy);
+                this.sortBy = order[(idx+1)%order.length];
+                this.refreshDirectory();
+            }
+
+            // ---------- GLOBAL KEY HANDLER ----------
+            handleGlobalKey(e) {
+                if (this.isInputActive || this.loading) return;
+                const key = e.key;
+                if (key === 'j' || key === 'ArrowDown') { e.preventDefault(); this.moveCursor(1); }
+                else if (key === 'k' || key === 'ArrowUp') { e.preventDefault(); this.moveCursor(-1); }
+                else if (key === 'Enter' && e.shiftKey) { e.preventDefault(); this.goUp(); }
+                else if (key === 'Enter') { e.preventDefault(); const cur = this.entries[this.cursorIndex]; if(cur) this.enterDirectory(cur); }
+                else if (key === 'm' || key === ' ') { e.preventDefault(); this.toggleMark(); }
+                else if (key === 'u') { e.preventDefault(); this.unmarkCurrent(); }
+                else if (key === 'U') { e.preventDefault(); this.unmarkAll(); }
+                else if (key === 'd') { e.preventDefault(); this.toggleFlag(); }
+                else if (key === 'x') { e.preventDefault(); this.executeDelete(); }
+                else if (key === '+') { e.preventDefault(); this.createItem(true); }
+                else if (key === "'") { e.preventDefault(); this.createItem(false); }
+                else if (key === 'y' || key === 'C') { e.preventDefault(); this.yank('copy'); }
+                else if (key === 'M') { e.preventDefault(); this.yank('move'); }
+                else if (key === 'p') { e.preventDefault(); this.pasteItems(); }
+                else if (key === 'R') { e.preventDefault(); this.renameOrMove(); }
+                else if (key === '/') { e.preventDefault(); this.openFilter(); }
+                else if (key === 's') { e.preventDefault(); this.cycleSort(); }
+                else if (key === 'g') { e.preventDefault(); this.refreshDirectory(); }
+                else if (key === '(') { e.preventDefault(); this.toggleDetails(); }
+                else if (key === ')') { e.preventDefault(); this.toggleIcons(); }
+                else if (key === '0') { e.preventDefault(); this.toggleOmit(); }
+                else if (key === 'W') { e.preventDefault(); const cur=this.entries[this.cursorIndex]; if(cur) this.browseFile(cur); }
+                else if (key === '?') { e.preventDefault(); document.getElementById('help-overlay').style.display='flex'; }
+                else if (key === 'q') { if(confirm('Quit jsDired?')) location.reload(); }
+                else if (key === 'Escape') { document.getElementById('help-overlay').style.display='none'; }
+            }
+        }
+
+        // ---------- Bootstrap ----------
+        window.dired = new Dired();
+        // Edge: handle picker abort etc already covered.
+        // Protect against rapid key: state guards.
+    })();
+</script>
+</body>
+</html>

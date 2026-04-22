@@ -1,0 +1,350 @@
+<!-- jsDired Mix v1.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>jsDired</title>
+
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&display=swap" rel="stylesheet">
+
+<style>
+:root{
+--bg:#1a1b26;--bg-dark:#16161e;--fg:#a9b1d6;--fg-dim:#565f89;
+--blue:#7aa2f7;--cyan:#7dcfff;--green:#9ece6a;--orange:#ff9e64;
+--red:#f7768e;--magenta:#bb9af7;--cursor-bg:#3b4261;--border:#292e42;
+}
+*{box-sizing:border-box}
+body{
+margin:0;font-family:"JetBrains Mono",monospace;background:var(--bg);color:var(--fg);
+overflow:hidden;
+}
+#app{display:flex;flex-direction:column;height:100vh}
+
+header{
+padding:8px 12px;border-bottom:1px solid var(--border);
+display:flex;justify-content:space-between;font-size:13px;
+}
+
+.table{flex:1;overflow:auto}
+
+.row,.header-row{
+display:grid;
+grid-template-columns:40px 1fr 120px 180px;
+padding:4px 10px;
+white-space:nowrap;
+}
+.header-row{
+position:sticky;top:0;background:var(--bg-dark);
+color:var(--fg-dim);border-bottom:1px solid var(--border);
+}
+
+.row{cursor:pointer}
+.row-cursor{background:var(--cursor-bg);font-weight:bold}
+
+.name{overflow:hidden;text-overflow:ellipsis}
+.dir{color:var(--blue)}
+.special{color:var(--magenta)}
+.mark-star{color:var(--orange)}
+.mark-flag{color:var(--red)}
+
+footer{
+padding:6px 10px;border-top:1px solid var(--border);
+display:flex;justify-content:space-between;font-size:12px;
+}
+
+#overlay{
+position:absolute;inset:0;background:rgba(0,0,0,.7);
+display:flex;align-items:center;justify-content:center;flex-direction:column;
+}
+button{
+padding:10px 20px;background:var(--blue);border:none;color:#fff;cursor:pointer;
+}
+
+#mini{
+position:absolute;bottom:40px;left:50%;transform:translateX(-50%);
+background:var(--bg-dark);padding:8px;border:1px solid var(--border);
+display:none;
+}
+#mini input{
+background:none;border:none;color:var(--fg);outline:none;width:400px;
+}
+
+#toast{position:absolute;top:10px;right:10px}
+.toast{
+background:var(--bg-dark);padding:8px 12px;margin-top:6px;
+border-left:4px solid var(--blue);
+animation:fade 3.5s forwards;
+}
+@keyframes fade{0%{opacity:1}100%{opacity:0}}
+</style>
+</head>
+
+<body>
+<div id="app">
+
+<header>
+<div id="path"></div>
+<div>jsDired</div>
+</header>
+
+<div class="header-row">
+<div>M</div><div>Name</div><div>Size</div><div>Modified</div>
+</div>
+
+<div class="table" id="table"></div>
+
+<footer>
+<div id="status"></div>
+<div id="mode"></div>
+</footer>
+
+<div id="mini"><input id="miniInput"></div>
+<div id="toast"></div>
+
+<div id="overlay">
+<h2>jsDired</h2>
+<button id="grant">Grant Access</button>
+</div>
+
+</div>
+
+<script>
+class Dired{
+constructor(){
+this.rootHandle=null;
+this.currentHandle=null;
+this.pathSegments=[];
+this.entries=[];
+this.cursorIndex=0;
+this.marked=new Set();
+this.flagged=new Set();
+this.clipboard=null;
+this.filterRegex=null;
+this.sortBy='name';
+this.loading=false;
+this.isInputActive=false;
+this.inputCallback=null;
+
+this.bindKeys();
+}
+
+escape(s){
+return s.replace(/[&<>"']/g,m=>({
+"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+}[m]));
+}
+
+toast(msg,color='blue'){
+const t=document.createElement('div');
+t.className='toast';
+t.style.borderColor=`var(--${color})`;
+t.textContent=msg;
+document.getElementById('toast').appendChild(t);
+setTimeout(()=>t.remove(),3500);
+}
+
+async pick(){
+try{
+this.rootHandle=await window.showDirectoryPicker({mode:'readwrite'});
+this.currentHandle=this.rootHandle;
+this.pathSegments=[{handle:this.rootHandle,name:this.rootHandle.name}];
+document.getElementById('overlay').style.display='none';
+await this.refreshDirectory();
+}catch(e){
+this.toast('Permission denied','red');
+}
+}
+
+async refreshDirectory(){
+if(this.loading)return;
+this.loading=true;
+
+try{
+let arr=[];
+
+arr.push({name:'.',isDot:true});
+if(this.pathSegments.length>1)arr.push({name:'..',isDotDot:true});
+
+for await(const h of this.currentHandle.values()){
+let stats=await this.getStats(h);
+arr.push({...stats,handle:h});
+}
+
+// filter
+if(this.filterRegex){
+arr=arr.filter(e=>e.isDot||e.isDotDot||this.filterRegex.test(e.name));
+}
+
+// sort
+arr=this.sort(arr);
+
+this.entries=arr;
+this.cursorIndex=Math.min(this.cursorIndex,arr.length-1);
+
+this.render();
+}finally{
+setTimeout(()=>this.loading=false,200);
+}
+}
+
+async getStats(h){
+try{
+if(h.kind==='directory'){
+return {name:h.name,kind:'directory'};
+}
+let f=await h.getFile();
+return {name:h.name,kind:'file',size:f.size,mtime:new Date(f.lastModified)};
+}catch{
+return {name:h.name,kind:h.kind,size:0};
+}
+}
+
+sort(arr){
+return arr.sort((a,b)=>{
+if(a.isDot)return -1;
+if(b.isDot)return 1;
+if(a.isDotDot)return -1;
+if(b.isDotDot)return 1;
+if(a.kind!==b.kind)return a.kind==='directory'?-1:1;
+
+if(this.sortBy==='name')return a.name.localeCompare(b.name);
+if(this.sortBy==='size')return (a.size||0)-(b.size||0);
+if(this.sortBy==='mtime')return (a.mtime||0)-(b.mtime||0);
+});
+}
+
+render(){
+const t=document.getElementById('table');
+let html='';
+
+this.entries.forEach((e,i)=>{
+let mark=' ';
+if(this.marked.has(e.name))mark='*';
+if(this.flagged.has(e.name))mark='D';
+
+let cls='row';
+if(i===this.cursorIndex)cls+=' row-cursor';
+
+let name=this.escape(e.name);
+if(e.kind==='directory')name+='/';
+
+let size=e.size? (e.size/1024).toFixed(1)+'KB':'-';
+let mod=e.mtime?e.mtime.toLocaleString():'-';
+
+html+=`
+<div class="${cls}">
+<div class="${mark==='*'?'mark-star':mark==='D'?'mark-flag':''}">${mark}</div>
+<div class="name ${e.kind==='directory'?'dir':''} ${e.isDot||e.isDotDot?'special':''}">${name}</div>
+<div>${size}</div>
+<div>${mod}</div>
+</div>`;
+});
+
+t.innerHTML=html;
+
+document.getElementById('path').textContent=this.pathSegments.map(p=>p.name).join(' / ');
+document.getElementById('status').textContent=
+`${this.entries.length} items | ${this.marked.size} marked | ${this.flagged.size} flagged`;
+document.getElementById('mode').textContent=
+(this.marked.size||this.flagged.size)?'DIRED':'NORMAL';
+}
+
+moveCursor(d){
+this.cursorIndex=Math.max(0,Math.min(this.entries.length-1,this.cursorIndex+d));
+this.render();
+}
+
+current(){
+return this.entries[this.cursorIndex];
+}
+
+toggleMark(){
+let e=this.current();
+if(e.isDot||e.isDotDot)return this.toast('Cannot operate','red');
+
+if(this.marked.has(e.name))this.marked.delete(e.name);
+else this.marked.add(e.name);
+
+this.moveCursor(1);
+}
+
+flag(){
+let e=this.current();
+if(e.isDot||e.isDotDot)return this.toast('Cannot operate','red');
+
+if(this.flagged.has(e.name))this.flagged.delete(e.name);
+else this.flagged.add(e.name);
+
+this.moveCursor(1);
+}
+
+async enter(){
+let e=this.current();
+
+if(e.isDot)return this.refreshDirectory();
+if(e.isDotDot)return this.goUp();
+
+if(e.kind==='directory'){
+this.currentHandle=e.handle;
+this.pathSegments.push({handle:e.handle,name:e.name});
+this.filterRegex=null;
+await this.refreshDirectory();
+}
+}
+
+async goUp(){
+if(this.pathSegments.length<=1)return;
+this.pathSegments.pop();
+this.currentHandle=this.pathSegments[this.pathSegments.length-1].handle;
+this.filterRegex=null;
+await this.refreshDirectory();
+}
+
+bindKeys(){
+window.addEventListener('keydown',e=>{
+if(this.isInputActive)return;
+
+if(e.key==='j'||e.key==='ArrowDown')this.moveCursor(1);
+if(e.key==='k'||e.key==='ArrowUp')this.moveCursor(-1);
+if(e.key==='Enter')this.enter();
+if(e.key==='m'||e.key===' ')this.toggleMark();
+if(e.key==='d')this.flag();
+if(e.key==='g')this.refreshDirectory();
+if(e.key==='U'){this.marked.clear();this.flagged.clear();this.render();}
+if(e.key==='/'){
+this.openMini('/',"",val=>{
+this.filterRegex=new RegExp(val);
+this.refreshDirectory();
+});
+}
+});
+}
+
+openMini(label,val,cb){
+this.isInputActive=true;
+const box=document.getElementById('mini');
+const input=document.getElementById('miniInput');
+box.style.display='block';
+input.value=val;
+input.focus();
+
+input.onkeydown=(e)=>{
+if(e.key==='Enter'){
+this.isInputActive=false;
+box.style.display='none';
+cb(input.value);
+}
+if(e.key==='Escape'){
+this.isInputActive=false;
+box.style.display='none';
+}
+};
+}
+}
+
+const app=new Dired();
+document.getElementById('grant').onclick=()=>app.pick();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1479 @@
+<!-- jsDired Mix v1.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>jsDired</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* ─── RESET & BASE ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #1a1b26;
+    --bg-dark:   #16161e;
+    --fg:        #a9b1d6;
+    --fg-dim:    #565f89;
+    --blue:      #7aa2f7;
+    --cyan:      #7dcfff;
+    --green:     #9ece6a;
+    --orange:    #ff9e64;
+    --red:       #f7768e;
+    --magenta:   #bb9af7;
+    --cursor-bg: #3b4261;
+    --border:    #292e42;
+    --font: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-dark);
+    color: var(--fg);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+
+  /* ─── LANDING OVERLAY ──────────────────────────────────────── */
+  #landing {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: var(--bg-dark);
+    z-index: 1000;
+    gap: 24px;
+  }
+
+  #landing .logo {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--blue);
+    letter-spacing: 0.05em;
+  }
+  #landing .logo span { color: var(--magenta); }
+
+  #landing .subtitle {
+    color: var(--fg-dim);
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+  }
+
+  #landing .grant-btn {
+    margin-top: 8px;
+    padding: 10px 32px;
+    background: transparent;
+    border: 1px solid var(--blue);
+    color: var(--blue);
+    font-family: var(--font);
+    font-size: 0.9rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background 0.15s, color 0.15s;
+  }
+  #landing .grant-btn:hover {
+    background: var(--blue);
+    color: var(--bg-dark);
+  }
+
+  /* ─── APP SHELL ────────────────────────────────────────────── */
+  #app {
+    display: none;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  #app.visible { display: flex; }
+
+  /* ─── HEADER ───────────────────────────────────────────────── */
+  #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 12px;
+    background: var(--bg-dark);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    min-height: 28px;
+  }
+
+  #header .path {
+    color: var(--cyan);
+    font-weight: 500;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 70%;
+  }
+
+  #header .right {
+    display: flex; gap: 16px;
+    align-items: center;
+    color: var(--fg-dim);
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  #header .app-name {
+    color: var(--blue);
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+  }
+
+  /* ─── TABLE AREA ────────────────────────────────────────────── */
+  #table-wrap {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: var(--bg);
+    position: relative;
+  }
+
+  #table-wrap::-webkit-scrollbar { width: 6px; }
+  #table-wrap::-webkit-scrollbar-track { background: var(--bg-dark); }
+  #table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ─── COLUMN HEADER ─────────────────────────────────────────── */
+  #col-header {
+    display: grid;
+    grid-template-columns: 18px minmax(0,1fr) 90px 160px;
+    gap: 0 8px;
+    padding: 4px 10px;
+    background: var(--bg-dark);
+    border-bottom: 1px solid var(--border);
+    color: var(--fg-dim);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  #col-header .ch-mark { text-align: center; }
+  #col-header .ch-size { text-align: right; white-space: nowrap; }
+  #col-header .ch-mtime { white-space: nowrap; }
+
+  /* columns hidden when details mode off */
+  .details-hidden #col-header .ch-size,
+  .details-hidden #col-header .ch-mtime,
+  .details-hidden .row .col-size,
+  .details-hidden .row .col-mtime { display: none; }
+
+  .details-hidden #col-header { grid-template-columns: 18px minmax(0,1fr); }
+  .details-hidden .row { grid-template-columns: 18px minmax(0,1fr); }
+
+  /* ─── ROWS ──────────────────────────────────────────────────── */
+  .row {
+    display: grid;
+    grid-template-columns: 18px minmax(0,1fr) 90px 160px;
+    gap: 0 8px;
+    padding: 2px 10px;
+    cursor: default;
+    user-select: none;
+    border-bottom: 1px solid transparent;
+    transition: background 0.05s;
+  }
+
+  .row:hover { background: rgba(59,66,97,0.4); }
+
+  .row.row-cursor {
+    background: var(--cursor-bg);
+    font-weight: 600;
+  }
+
+  .row .col-mark {
+    text-align: center;
+    font-weight: 700;
+    flex-shrink: 0;
+    width: 18px;
+  }
+
+  .row .col-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .row .col-size {
+    text-align: right;
+    white-space: nowrap;
+    color: var(--fg-dim);
+    font-size: 0.8rem;
+  }
+
+  .row .col-mtime {
+    white-space: nowrap;
+    color: var(--fg-dim);
+    font-size: 0.8rem;
+    min-width: 155px;
+  }
+
+  /* ─── Entry coloring ────────────────────────────────────────── */
+  .type-dir .col-name  { color: var(--blue); }
+  .type-special .col-name { color: var(--magenta); }
+  .mark-star .col-mark { color: var(--orange); }
+  .mark-star .col-name { color: var(--orange); }
+  .mark-flag .col-mark { color: var(--red); }
+  .mark-flag .col-name { color: var(--red); }
+
+  .icon { font-size: 0.9em; flex-shrink: 0; }
+
+  /* ─── MINIBUFFER ────────────────────────────────────────────── */
+  #minibuffer {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    background: var(--bg-dark);
+    border-top: 1px solid var(--orange);
+    flex-shrink: 0;
+  }
+  #minibuffer.active { display: flex; }
+
+  #minibuffer label {
+    color: var(--orange);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  #minibuffer input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--fg);
+    font-family: var(--font);
+    font-size: 0.85rem;
+    caret-color: var(--orange);
+  }
+
+  /* ─── STATUS BAR ────────────────────────────────────────────── */
+  #statusbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 12px;
+    background: var(--bg-dark);
+    border-top: 1px solid var(--border);
+    font-size: 0.72rem;
+    color: var(--fg-dim);
+    flex-shrink: 0;
+    gap: 12px;
+  }
+
+  .mode-pill {
+    padding: 1px 8px;
+    border-radius: 2px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .mode-normal { background: rgba(158,206,106,0.15); color: var(--green); border: 1px solid var(--green); }
+  .mode-dired  { background: rgba(255,158,100,0.15); color: var(--orange); border: 1px solid var(--orange); }
+
+  #sb-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #sb-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+  .sb-chip {
+    color: var(--fg-dim);
+    font-size: 0.7rem;
+  }
+  .sb-chip span { color: var(--cyan); }
+
+  /* ─── TOAST ─────────────────────────────────────────────────── */
+  #toast-container {
+    position: fixed;
+    top: 12px; right: 12px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+  }
+
+  .toast {
+    padding: 8px 14px;
+    background: var(--bg-dark);
+    border-left: 3px solid var(--blue);
+    border-radius: 2px;
+    font-size: 0.78rem;
+    color: var(--fg);
+    max-width: 320px;
+    word-break: break-word;
+    opacity: 0;
+    transform: translateX(20px);
+    animation: toastIn 0.18s ease forwards;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+  }
+  .toast.success { border-color: var(--green); }
+  .toast.error   { border-color: var(--red); color: var(--red); }
+  .toast.info    { border-color: var(--blue); }
+  .toast.fadeout {
+    animation: toastOut 0.2s ease forwards;
+  }
+
+  @keyframes toastIn  { to { opacity: 1; transform: translateX(0); } }
+  @keyframes toastOut { to { opacity: 0; transform: translateX(20px); } }
+
+  /* ─── LOADING OVERLAY ───────────────────────────────────────── */
+  #loading-overlay {
+    position: absolute; inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(26,27,38,0.7);
+    z-index: 50;
+    flex-direction: column;
+    gap: 12px;
+  }
+  #loading-overlay.visible { display: flex; }
+
+  .spinner {
+    width: 24px; height: 24px;
+    border: 2px solid var(--border);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text { color: var(--fg-dim); font-size: 0.8rem; }
+
+  /* ─── HELP OVERLAY ──────────────────────────────────────────── */
+  #help-overlay {
+    position: fixed; inset: 0;
+    background: rgba(22,22,30,0.92);
+    z-index: 500;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  #help-overlay.visible { display: flex; }
+
+  #help-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px 28px;
+    max-width: 680px;
+    width: 94vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    color: var(--fg);
+    font-size: 0.78rem;
+  }
+
+  #help-box h2 {
+    color: var(--blue);
+    font-size: 0.95rem;
+    margin-bottom: 14px;
+    letter-spacing: 0.05em;
+  }
+
+  #help-box h3 {
+    color: var(--cyan);
+    font-size: 0.78rem;
+    margin: 12px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .help-grid {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 3px 8px;
+    margin-bottom: 4px;
+  }
+
+  .help-key {
+    color: var(--orange);
+    font-weight: 600;
+    text-align: right;
+    padding-right: 8px;
+  }
+
+  .help-desc { color: var(--fg-dim); }
+
+  #help-box .close-hint {
+    margin-top: 14px;
+    color: var(--fg-dim);
+    font-size: 0.72rem;
+    text-align: right;
+  }
+
+  /* ─── EMPTY DIR ─────────────────────────────────────────────── */
+  .empty-dir {
+    padding: 24px 12px;
+    color: var(--fg-dim);
+    font-style: italic;
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ LANDING ═════════════════════════════════════ -->
+<div id="landing">
+  <div class="logo">js<span>Dired</span></div>
+  <div class="subtitle">Browser File Manager · Tokyo Night</div>
+  <button class="grant-btn" id="grant-btn">Grant Access</button>
+</div>
+
+<!-- ═══════════════ TOAST CONTAINER ════════════════════════════ -->
+<div id="toast-container"></div>
+
+<!-- ═══════════════ HELP OVERLAY ════════════════════════════════ -->
+<div id="help-overlay">
+  <div id="help-box">
+    <h2>jsDired — Keyboard Reference</h2>
+
+    <h3>Navigation</h3>
+    <div class="help-grid">
+      <span class="help-key">j / ↓</span><span class="help-desc">Cursor down</span>
+      <span class="help-key">k / ↑</span><span class="help-desc">Cursor up</span>
+      <span class="help-key">Enter</span><span class="help-desc">Open directory / refresh on .</span>
+      <span class="help-key">S-Enter</span><span class="help-desc">Go to parent directory</span>
+      <span class="help-key">g</span><span class="help-desc">Revert / refresh buffer</span>
+    </div>
+
+    <h3>Marking</h3>
+    <div class="help-grid">
+      <span class="help-key">m / SPC</span><span class="help-desc">Toggle mark (*)</span>
+      <span class="help-key">u</span><span class="help-desc">Unmark + unflag current</span>
+      <span class="help-key">U</span><span class="help-desc">Unmark all</span>
+      <span class="help-key">d</span><span class="help-desc">Flag for deletion (D)</span>
+      <span class="help-key">x</span><span class="help-desc">Execute: delete flagged/marked</span>
+    </div>
+
+    <h3>File Operations</h3>
+    <div class="help-grid">
+      <span class="help-key">+</span><span class="help-desc">Create directory</span>
+      <span class="help-key">'</span><span class="help-desc">Create empty file</span>
+      <span class="help-key">y / C</span><span class="help-desc">Copy targets to clipboard</span>
+      <span class="help-key">M</span><span class="help-desc">Move (cut) targets to clipboard</span>
+      <span class="help-key">p</span><span class="help-desc">Paste</span>
+      <span class="help-key">R</span><span class="help-desc">Rename (single) / Move (marked)</span>
+    </div>
+
+    <h3>Toggles &amp; Utilities</h3>
+    <div class="help-grid">
+      <span class="help-key">(</span><span class="help-desc">Toggle Details (size/mtime)</span>
+      <span class="help-key">)</span><span class="help-desc">Toggle Icons</span>
+      <span class="help-key">0</span><span class="help-desc">Toggle Omit (hidden files)</span>
+      <span class="help-key">W</span><span class="help-desc">Browse: open file in browser</span>
+      <span class="help-key">/</span><span class="help-desc">Filter (regex)</span>
+      <span class="help-key">s</span><span class="help-desc">Cycle sort: name → size → mtime</span>
+      <span class="help-key">T</span><span class="help-desc">Toggle trash mode</span>
+      <span class="help-key">?</span><span class="help-desc">Show this help</span>
+      <span class="help-key">q</span><span class="help-desc">Quit (reload page)</span>
+    </div>
+
+    <div class="close-hint">Press <span style="color:var(--orange)">?</span> or <span style="color:var(--orange)">Escape</span> to close</div>
+  </div>
+</div>
+
+<!-- ═══════════════ APP SHELL ════════════════════════════════════ -->
+<div id="app">
+
+  <!-- Header -->
+  <div id="header">
+    <div class="path" id="header-path">—</div>
+    <div class="right">
+      <span id="header-sort" style="color:var(--fg-dim);font-size:0.72rem"></span>
+      <span class="app-name">jsDired</span>
+    </div>
+  </div>
+
+  <!-- Column headers -->
+  <div id="col-header">
+    <span class="ch-mark">M</span>
+    <span>Name</span>
+    <span class="ch-size">Size</span>
+    <span class="ch-mtime">Modified</span>
+  </div>
+
+  <!-- Scrollable entry list -->
+  <div id="table-wrap">
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <div class="loading-text">Working…</div>
+    </div>
+    <div id="entry-list"></div>
+  </div>
+
+  <!-- Minibuffer -->
+  <div id="minibuffer">
+    <label id="mini-label">Rename:</label>
+    <input id="mini-input" type="text" autocomplete="off" spellcheck="false" />
+  </div>
+
+  <!-- Status bar -->
+  <div id="statusbar">
+    <div id="sb-left">
+      <span id="mode-pill" class="mode-pill mode-normal">NORMAL</span>
+      <span class="sb-chip">Entries: <span id="sb-entries">0</span></span>
+      <span class="sb-chip">Marked: <span id="sb-marked">0</span></span>
+      <span class="sb-chip">Flagged: <span id="sb-flagged">0</span></span>
+    </div>
+    <div id="sb-right">
+      <span id="sb-trash" class="sb-chip"></span>
+      <span id="sb-yank" class="sb-chip"></span>
+    </div>
+  </div>
+</div><!-- /#app -->
+
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════
+   UTILITY HELPERS
+════════════════════════════════════════════════════════════════ */
+
+/** HTML-escape a string (EC #2) */
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Format bytes for display */
+function fmtSize(bytes) {
+  if (bytes === null || bytes === undefined) return '—';
+  if (bytes === 0) return '0 B';
+  const units = ['B','KB','MB','GB','TB'];
+  const i = Math.floor(Math.log2(bytes) / 10);
+  return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i];
+}
+
+/** Format a Date for the Modified column */
+function fmtDate(d) {
+  if (!d) return '—';
+  const now  = new Date();
+  const same = d.getFullYear() === now.getFullYear();
+  const day  = String(d.getDate()).padStart(2, '0');
+  const mon  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+  const hh   = String(d.getHours()).padStart(2, '0');
+  const mm   = String(d.getMinutes()).padStart(2, '0');
+  return same ? `${day} ${mon} ${hh}:${mm}` : `${day} ${mon} ${d.getFullYear()}`;
+}
+
+/* File-type icons */
+const EXT_ICONS = {
+  js:'🟨', ts:'🔷', jsx:'⚛️', tsx:'⚛️',
+  html:'🌐', css:'🎨', json:'📋', md:'📝', txt:'📄',
+  sh:'🐚', py:'🐍', rb:'💎', rs:'🦀', c:'⚙️', cpp:'⚙️', h:'⚙️',
+  png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️', svg:'🖼️', webp:'🖼️',
+  mp4:'🎬', mkv:'🎬', mov:'🎬', avi:'🎬',
+  mp3:'🎵', wav:'🎵', ogg:'🎵', flac:'🎵',
+  pdf:'📕', zip:'📦', tar:'📦', gz:'📦', rar:'📦', '7z':'📦',
+  doc:'📘', docx:'📘', xls:'📗', xlsx:'📗', ppt:'📙', pptx:'📙',
+};
+
+function getIcon(name, kind) {
+  if (kind === 'directory') return '📁';
+  const dot = name.lastIndexOf('.');
+  if (dot < 0) return '📄';
+  const ext = name.slice(dot + 1).toLowerCase();
+  return EXT_ICONS[ext] || '📄';
+}
+
+/* ════════════════════════════════════════════════════════════════
+   TOAST
+════════════════════════════════════════════════════════════════ */
+
+const toastContainer = document.getElementById('toast-container');
+
+function showToast(msg, type = 'info', dur = 3500) {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  toastContainer.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('fadeout');
+    el.addEventListener('animationend', () => el.remove(), { once: true });
+  }, dur);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   DIRED CLASS
+════════════════════════════════════════════════════════════════ */
+
+class Dired {
+  constructor() {
+    // ── File system state ──────────────────────────────────
+    this.rootHandle    = null;           // initially-picked dir
+    this.currentHandle = null;           // directory being viewed
+    this.pathSegments  = [];             // [{handle, name}]
+
+    // ── Entry list ─────────────────────────────────────────
+    this.entries    = [];                // full rendered list
+    this.cursorIndex = 0;
+
+    // ── Selection sets (store names, not indices) ──────────
+    this.marked  = new Set();
+    this.flagged = new Set();
+
+    // ── Clipboard ──────────────────────────────────────────
+    this.clipboard = null; // {action:'copy'|'move', items, sourceHandle}
+
+    // ── Modes & filters ───────────────────────────────────
+    this.filterRegex   = null;
+    this.sortBy        = 'name';         // 'name'|'size'|'mtime'
+    this.detailsMode   = false;          // toggle (
+    this.iconsMode     = true;           // toggle )
+    this.omitMode      = true;           // toggle 0
+    this.deleteByTrashing = true;        // toggle T
+
+    // ── UI guards ─────────────────────────────────────────
+    this.loading      = false;
+    this.isInputActive = false;
+    this.inputCallback = null;
+
+    // ── DOM refs ──────────────────────────────────────────
+    this.$list    = document.getElementById('entry-list');
+    this.$overlay = document.getElementById('loading-overlay');
+    this.$mini    = document.getElementById('minibuffer');
+    this.$miniLbl = document.getElementById('mini-label');
+    this.$miniInp = document.getElementById('mini-input');
+    this.$tableWrap = document.getElementById('table-wrap');
+    this.$colHeader = document.getElementById('col-header');
+
+    this._bindKeys();
+    this._bindMini();
+    this._loadingTimer = null;
+  }
+
+  /* ─── BOOT ────────────────────────────────────────────────── */
+
+  async grantAccess() {
+    try {
+      let handle;
+      try {
+        handle = await showDirectoryPicker({ startIn: 'downloads', mode: 'readwrite' });
+      } catch {
+        handle = await showDirectoryPicker({ mode: 'readwrite' }); // fallback
+      }
+      this.rootHandle    = handle;
+      this.currentHandle = handle;
+      this.pathSegments  = [{ handle, name: handle.name }];
+
+      document.getElementById('landing').style.display = 'none';
+      document.getElementById('app').classList.add('visible');
+
+      await this.refreshDirectory();
+    } catch (err) {
+      // EC #12 — AbortError
+      if (err.name === 'AbortError') {
+        showToast('Directory picker cancelled.', 'info');
+      } else {
+        showToast(`Error: ${err.message}`, 'error');
+      }
+    }
+  }
+
+  /* ─── LOADING ─────────────────────────────────────────────── */
+
+  /** Show loading overlay with a 150ms debounce (EC perf: threshold loading) */
+  _setLoading(on) {
+    if (on) {
+      this._loadingTimer = setTimeout(() => {
+        this.$overlay.classList.add('visible');
+      }, 160);
+    } else {
+      clearTimeout(this._loadingTimer);
+      // Debounce hide by 200ms to avoid flicker
+      setTimeout(() => {
+        this.$overlay.classList.remove('visible');
+      }, 200);
+    }
+  }
+
+  /* ─── REFRESH DIRECTORY ───────────────────────────────────── */
+
+  async refreshDirectory() {
+    // EC #9 — guard overlapping refresh
+    if (this.loading) return;
+    this.loading = true;
+    this._setLoading(true);
+
+    // Yield to main thread before heavy work
+    await new Promise(r => setTimeout(r, 0));
+
+    try {
+      const rawEntries = [];
+
+      // Always include . and ..
+      rawEntries.push({ handle: this.currentHandle, name: '.', kind: 'directory', size: null, mtime: null, isDot: true, isDotDot: false });
+      if (this.pathSegments.length > 1) {
+        rawEntries.push({ handle: null, name: '..', kind: 'directory', size: null, mtime: null, isDot: false, isDotDot: true });
+      }
+
+      // Enumerate directory entries
+      for await (const entry of this.currentHandle.values()) {
+        // EC #6 — hidden files: if omit mode ON, skip dotfiles (except . and ..)
+        if (this.omitMode && entry.name.startsWith('.')) continue;
+
+        const stats = await this._getFileStats(entry);
+        rawEntries.push({
+          handle: entry,
+          name: entry.name,
+          kind: entry.kind,
+          size: stats.size,
+          mtime: stats.mtime,
+          isDot: false,
+          isDotDot: false,
+        });
+      }
+
+      // Apply filter (keep dot entries always)
+      let filtered = rawEntries;
+      if (this.filterRegex) {
+        filtered = rawEntries.filter(e => e.isDot || e.isDotDot || this.filterRegex.test(e.name));
+      }
+
+      // Sort
+      this.entries = this._sortItems(filtered);
+
+      // Clamp cursor
+      this.cursorIndex = Math.min(this.cursorIndex, Math.max(0, this.entries.length - 1));
+
+      this._render();
+    } catch (err) {
+      // EC #4 — permission denied
+      showToast(`Refresh error: ${err.message}`, 'error');
+    } finally {
+      this.loading = false;
+      this._setLoading(false);
+    }
+  }
+
+  /* ─── GET FILE STATS ──────────────────────────────────────── */
+
+  async _getFileStats(handle) {
+    try {
+      if (handle.kind === 'directory') return { size: null, mtime: null };
+      const file = await handle.getFile();
+      return { size: file.size, mtime: new Date(file.lastModified) };
+    } catch {
+      return { size: 0, mtime: null };
+    }
+  }
+
+  /* ─── SORT ────────────────────────────────────────────────── */
+
+  _sortItems(items) {
+    const dot    = items.filter(e => e.isDot);
+    const dotdot = items.filter(e => e.isDotDot);
+    const rest   = items.filter(e => !e.isDot && !e.isDotDot);
+
+    rest.sort((a, b) => {
+      // Dirs before files
+      if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
+      if (this.sortBy === 'size') {
+        const sa = a.size ?? -1, sb = b.size ?? -1;
+        return sa - sb;
+      }
+      if (this.sortBy === 'mtime') {
+        const ma = a.mtime?.getTime() ?? 0, mb = b.mtime?.getTime() ?? 0;
+        return ma - mb;
+      }
+      // name
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+
+    return [...dot, ...dotdot, ...rest];
+  }
+
+  /* ─── RENDER ──────────────────────────────────────────────── */
+
+  /** Full DOM rebuild (EC #1: only called on data change, not cursor move) */
+  _render() {
+    // Update header
+    document.getElementById('header-path').textContent =
+      this.pathSegments.map(s => s.name).join(' / ');
+    document.getElementById('header-sort').textContent = `sort:${this.sortBy}`;
+
+    // Details mode class on col-header parent
+    const tableWrap = this.$tableWrap;
+    tableWrap.classList.toggle('details-hidden', !this.detailsMode);
+    this.$colHeader.parentElement?.classList?.toggle('details-hidden', !this.detailsMode);
+
+    // We need the class on a wrapper; easiest: put on #app
+    document.getElementById('app').classList.toggle('details-hidden', !this.detailsMode);
+
+    // Build rows HTML — EC #1: no DOM ops per cursor move
+    const html = [];
+    for (let i = 0; i < this.entries.length; i++) {
+      const e = this.entries[i];
+      const isCursor  = i === this.cursorIndex;
+      const isMarked  = this.marked.has(e.name);
+      const isFlagged = this.flagged.has(e.name);
+
+      let rowCls = 'row';
+      if (isCursor) rowCls += ' row-cursor';
+      if (e.isDot || e.isDotDot) rowCls += ' type-special';
+      else if (e.kind === 'directory') rowCls += ' type-dir';
+      if (isMarked)  rowCls += ' mark-star';
+      if (isFlagged) rowCls += ' mark-flag';
+
+      const mark = isFlagged ? 'D' : (isMarked ? '*' : '&nbsp;');
+
+      // Icon — EC #, icons mode
+      let iconHtml = '';
+      if (this.iconsMode && !e.isDot && !e.isDotDot) {
+        const ico = getIcon(e.name, e.kind);
+        iconHtml = `<span class="icon" aria-hidden="true">${ico}</span>`;
+      }
+
+      // Display name (EC #2 — HTML-escape)
+      let dispName = esc(e.name);
+      if (e.isDot)    dispName = './';
+      else if (e.isDotDot) dispName = '../';
+      else if (e.kind === 'directory') dispName = esc(e.name) + '/';
+
+      const sizeHtml  = `<span class="col-size">${fmtSize(e.size)}</span>`;
+      const mtimeHtml = `<span class="col-mtime">${fmtDate(e.mtime)}</span>`;
+
+      html.push(
+        `<div class="${rowCls}" data-idx="${i}">` +
+          `<span class="col-mark">${mark}</span>` +
+          `<span class="col-name">${iconHtml}${dispName}</span>` +
+          sizeHtml +
+          mtimeHtml +
+        `</div>`
+      );
+    }
+
+    // EC #5 — empty dir
+    if (this.entries.length <= 2) { // only . and maybe ..
+      html.push(`<div class="empty-dir">(empty directory)</div>`);
+    }
+
+    this.$list.innerHTML = html.join('');
+
+    this._updateStatus();
+    this._scrollCursorIntoView();
+
+    // Click to set cursor
+    this.$list.querySelectorAll('.row[data-idx]').forEach(row => {
+      row.addEventListener('click', () => {
+        this.cursorIndex = parseInt(row.dataset.idx, 10);
+        this._renderCursorOnly();
+      });
+      row.addEventListener('dblclick', () => {
+        this.cursorIndex = parseInt(row.dataset.idx, 10);
+        this._openEntry();
+      });
+    });
+  }
+
+  /** Update only cursor class — avoids full re-render on j/k (EC #1) */
+  _renderCursorOnly() {
+    const rows = this.$list.querySelectorAll('.row');
+    rows.forEach((row, i) => {
+      row.classList.toggle('row-cursor', i === this.cursorIndex);
+    });
+    this._scrollCursorIntoView();
+  }
+
+  _scrollCursorIntoView() {
+    const rows = this.$list.querySelectorAll('.row');
+    if (rows[this.cursorIndex]) {
+      rows[this.cursorIndex].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  _updateStatus() {
+    const total   = this.entries.filter(e => !e.isDot && !e.isDotDot).length;
+    const markedN = this.marked.size;
+    const flaggedN= this.flagged.size;
+    const hasSel  = markedN > 0 || flaggedN > 0;
+
+    document.getElementById('sb-entries').textContent = total;
+    document.getElementById('sb-marked').textContent  = markedN;
+    document.getElementById('sb-flagged').textContent = flaggedN;
+
+    const pill = document.getElementById('mode-pill');
+    if (hasSel) {
+      pill.textContent = 'DIRED';
+      pill.className = 'mode-pill mode-dired';
+    } else {
+      pill.textContent = 'NORMAL';
+      pill.className = 'mode-pill mode-normal';
+    }
+
+    document.getElementById('sb-trash').innerHTML =
+      this.deleteByTrashing
+        ? `<span style="color:var(--cyan)">trash</span>`
+        : `<span style="color:var(--red)">perm-delete</span>`;
+
+    const sb = document.getElementById('sb-yank');
+    if (this.clipboard) {
+      const n = this.clipboard.items.length;
+      const act = this.clipboard.action === 'move' ? 'Move' : 'Copy';
+      sb.innerHTML = `<span style="color:var(--magenta)">[${act} ${n} item${n>1?'s':''}]</span>`;
+    } else {
+      sb.innerHTML = '';
+    }
+  }
+
+  /* ─── ENTRY INTERACTION ───────────────────────────────────── */
+
+  async _openEntry() {
+    const e = this.entries[this.cursorIndex];
+    if (!e) return;
+    if (e.isDot) {
+      await this.refreshDirectory(); // . = revert
+      return;
+    }
+    if (e.isDotDot) {
+      await this._goUp();
+      return;
+    }
+    if (e.kind === 'directory') {
+      await this._enterDir(e);
+    }
+  }
+
+  async _enterDir(e) {
+    try {
+      const sub = await this.currentHandle.getDirectoryHandle(e.name);
+      this.currentHandle = sub;
+      this.pathSegments.push({ handle: sub, name: e.name });
+      this.filterRegex = null; // EC #4 contextual reset
+      this.marked.clear();
+      this.flagged.clear();
+      this.cursorIndex = 0;
+      await this.refreshDirectory();
+    } catch (err) {
+      showToast(`Cannot open: ${err.message}`, 'error');
+    }
+  }
+
+  async _goUp() {
+    if (this.pathSegments.length <= 1) {
+      showToast('Already at root.', 'info');
+      return;
+    }
+    this.pathSegments.pop();
+    const parent = this.pathSegments[this.pathSegments.length - 1];
+    this.currentHandle = parent.handle;
+    this.filterRegex = null; // EC #4 contextual reset
+    this.marked.clear();
+    this.flagged.clear();
+    this.cursorIndex = 0;
+    await this.refreshDirectory();
+  }
+
+  /* ─── SPECIAL ENTRY GUARD ─────────────────────────────────── */
+
+  /** Returns true (and shows toast) if current cursor is on . or .. (EC #3) */
+  _isSpecial(e) {
+    if (!e) return true;
+    if (e.isDot || e.isDotDot) {
+      showToast('Cannot operate on special entries', 'info');
+      return true;
+    }
+    return false;
+  }
+
+  /* ─── OPERATION TARGETS ───────────────────────────────────── */
+
+  _getTargets() {
+    const real = this.entries.filter(e => !e.isDot && !e.isDotDot);
+    if (this.marked.size > 0) {
+      return real.filter(e => this.marked.has(e.name));
+    }
+    const cur = this.entries[this.cursorIndex];
+    if (!cur || cur.isDot || cur.isDotDot) return [];
+    return [cur];
+  }
+
+  /* ─── MARK / FLAG ─────────────────────────────────────────── */
+
+  _toggleMark() {
+    const e = this.entries[this.cursorIndex];
+    if (this._isSpecial(e)) return;
+    if (this.marked.has(e.name)) this.marked.delete(e.name);
+    else this.marked.add(e.name);
+    this._cursorDown();
+    this._render();
+  }
+
+  _toggleFlag() {
+    const e = this.entries[this.cursorIndex];
+    if (this._isSpecial(e)) return;
+    if (this.flagged.has(e.name)) this.flagged.delete(e.name);
+    else this.flagged.add(e.name);
+    this._cursorDown();
+    this._render();
+  }
+
+  _unmark() {
+    const e = this.entries[this.cursorIndex];
+    if (this._isSpecial(e)) return;
+    this.marked.delete(e.name);
+    this.flagged.delete(e.name);
+    this._cursorDown();
+    this._render();
+  }
+
+  _unmarkAll() {
+    this.marked.clear();
+    this.flagged.clear();
+    this._render();
+    showToast('All marks cleared.', 'info');
+  }
+
+  /* ─── CURSOR ─────────────────────────────────────────────── */
+
+  _cursorDown() {
+    if (this.cursorIndex < this.entries.length - 1) {
+      this.cursorIndex++;
+      this._renderCursorOnly();
+    }
+  }
+
+  _cursorUp() {
+    if (this.cursorIndex > 0) {
+      this.cursorIndex--;
+      this._renderCursorOnly();
+    }
+  }
+
+  /* ─── SORT CYCLE ─────────────────────────────────────────── */
+
+  async _cycleSort() {
+    const order = ['name','size','mtime'];
+    const idx = order.indexOf(this.sortBy);
+    this.sortBy = order[(idx + 1) % order.length];
+    showToast(`Sort: ${this.sortBy}`, 'info', 1500);
+    await this.refreshDirectory();
+  }
+
+  /* ─── CREATION ───────────────────────────────────────────── */
+
+  async _createDir() {
+    this._openMini('New directory name:', '', async name => {
+      if (!name) return;
+      try {
+        await this.currentHandle.getDirectoryHandle(name, { create: true });
+        showToast(`Directory "${name}" created.`, 'success');
+        await this.refreshDirectory();
+      } catch (err) {
+        // EC #4
+        showToast(`Error: ${err.message}`, 'error');
+      }
+    });
+  }
+
+  async _createFile() {
+    this._openMini('New file name:', '', async name => {
+      if (!name) return;
+      try {
+        const fh = await this.currentHandle.getFileHandle(name, { create: true });
+        const w  = await fh.createWritable();
+        await w.write('');
+        await w.close();
+        showToast(`File "${name}" created.`, 'success');
+        await this.refreshDirectory();
+      } catch (err) {
+        showToast(`Error: ${err.message}`, 'error');
+      }
+    });
+  }
+
+  /* ─── DELETE ─────────────────────────────────────────────── */
+
+  async _executeDelete() {
+    // Prefer flagged, fall back to marked, fall back to cursor
+    let targets;
+    if (this.flagged.size > 0) {
+      const real = this.entries.filter(e => !e.isDot && !e.isDotDot);
+      targets = real.filter(e => this.flagged.has(e.name));
+    } else {
+      targets = this._getTargets();
+    }
+    if (targets.length === 0) {
+      showToast('Nothing to delete.', 'info');
+      return;
+    }
+    const mode = this.deleteByTrashing ? 'trash' : 'permanently delete';
+    if (!confirm(`${mode.charAt(0).toUpperCase()+mode.slice(1)} ${targets.length} item(s)?\n\n${targets.map(t=>t.name).join('\n')}`)) return;
+
+    this.loading = true;
+    this._setLoading(true);
+    await new Promise(r => setTimeout(r, 0));
+
+    try {
+      if (this.deleteByTrashing) {
+        await this._trashItems(targets);
+      } else {
+        for (const t of targets) {
+          try {
+            await this.currentHandle.removeEntry(t.name, { recursive: true });
+            this.marked.delete(t.name);
+            this.flagged.delete(t.name);
+          } catch (err) {
+            // EC #4
+            showToast(`Cannot delete "${t.name}": ${err.message}`, 'error');
+          }
+        }
+      }
+      showToast(`${targets.length} item(s) deleted.`, 'success');
+    } finally {
+      this.loading = false;
+      this._setLoading(false);
+    }
+    await this.refreshDirectory();
+  }
+
+  /** Move items to a .trash folder in root (simulated trash, EC #5.1) */
+  async _trashItems(targets) {
+    try {
+      const trashDir = await this.rootHandle.getDirectoryHandle('.trash', { create: true });
+      for (const t of targets) {
+        try {
+          if (t.kind === 'file') {
+            const srcFile = await t.handle.getFile();
+            const destFh  = await trashDir.getFileHandle(t.name, { create: true });
+            const writer  = await destFh.createWritable();
+            await srcFile.stream().pipeTo(writer);
+            await this.currentHandle.removeEntry(t.name);
+          } else {
+            await this._recursiveCopy(t.handle, trashDir, t.name);
+            await this.currentHandle.removeEntry(t.name, { recursive: true });
+          }
+          this.marked.delete(t.name);
+          this.flagged.delete(t.name);
+        } catch (err) {
+          showToast(`Cannot trash "${t.name}": ${err.message}`, 'error');
+        }
+      }
+    } catch (err) {
+      showToast(`Trash error: ${err.message}`, 'error');
+    }
+  }
+
+  /* ─── CLIPBOARD ──────────────────────────────────────────── */
+
+  _yankCopy() {
+    const targets = this._getTargets();
+    if (targets.length === 0) { showToast('Nothing to copy.', 'info'); return; }
+    this.clipboard = { action: 'copy', items: targets.map(e=>({handle:e.handle,name:e.name,kind:e.kind})), sourceHandle: this.currentHandle };
+    showToast(`${targets.length} item(s) queued for copy.`, 'info');
+    this._updateStatus();
+  }
+
+  _yankMove() {
+    const targets = this._getTargets();
+    if (targets.length === 0) { showToast('Nothing to move.', 'info'); return; }
+    this.clipboard = { action: 'move', items: targets.map(e=>({handle:e.handle,name:e.name,kind:e.kind})), sourceHandle: this.currentHandle };
+    showToast(`${targets.length} item(s) queued for move.`, 'info');
+    this._updateStatus();
+  }
+
+  async _paste() {
+    if (!this.clipboard) { showToast('Clipboard is empty.', 'info'); return; }
+    const { action, items, sourceHandle } = this.clipboard;
+
+    // EC move collision guard
+    if (action === 'move' && sourceHandle === this.currentHandle) {
+      showToast('Source and destination are the same directory.', 'error');
+      return;
+    }
+
+    this.loading = true;
+    this._setLoading(true);
+    await new Promise(r => setTimeout(r, 0));
+
+    try {
+      for (const item of items) {
+        try {
+          let destName = item.name;
+          // EC #8 — collision: auto-rename
+          try {
+            if (item.kind === 'file')
+              await this.currentHandle.getFileHandle(destName);
+            else
+              await this.currentHandle.getDirectoryHandle(destName);
+            destName = 'copy_of_' + destName;
+          } catch { /* doesn't exist, good */ }
+
+          if (item.kind === 'file') {
+            const srcFile = await item.handle.getFile();
+            const destFh  = await this.currentHandle.getFileHandle(destName, { create: true });
+            const writer  = await destFh.createWritable();
+            // EC perf: stream copy
+            await srcFile.stream().pipeTo(writer);
+          } else {
+            await this._recursiveCopy(item.handle, this.currentHandle, destName);
+          }
+
+          // EC #4 — move: delete source after verified copy
+          if (action === 'move') {
+            try {
+              await sourceHandle.removeEntry(item.name, { recursive: true });
+            } catch (err) {
+              showToast(`Could not remove source "${item.name}": ${err.message}`, 'error');
+            }
+          }
+        } catch (err) {
+          showToast(`Paste error on "${item.name}": ${err.message}`, 'error');
+        }
+      }
+      showToast(`Paste complete (${items.length} item(s)).`, 'success');
+      this.clipboard = null;
+    } finally {
+      this.loading = false;
+      this._setLoading(false);
+    }
+    await this.refreshDirectory();
+  }
+
+  /** Recursive directory copy (EC #7) */
+  async _recursiveCopy(srcDir, destParent, newName) {
+    const destDir = await destParent.getDirectoryHandle(newName, { create: true });
+    for await (const entry of srcDir.values()) {
+      if (entry.kind === 'file') {
+        const f    = await entry.getFile();
+        const dest = await destDir.getFileHandle(entry.name, { create: true });
+        const w    = await dest.createWritable();
+        await f.stream().pipeTo(w);
+      } else {
+        await this._recursiveCopy(entry, destDir, entry.name);
+      }
+    }
+  }
+
+  /* ─── RENAME ─────────────────────────────────────────────── */
+
+  async _rename() {
+    const targets = this._getTargets();
+    if (targets.length === 0) { showToast('Nothing to rename.', 'info'); return; }
+
+    if (targets.length > 1) {
+      // Multiple marked → switch to Move context
+      this._yankMove();
+      showToast('Multiple items staged for move. Navigate to destination and press p.', 'info');
+      return;
+    }
+
+    const e = targets[0];
+    this._openMini(`Rename "${e.name}" →`, e.name, async newName => {
+      if (!newName || newName === e.name) return;
+      try {
+        if (typeof e.handle.move === 'function') {
+          await e.handle.move(newName);
+        } else {
+          // fallback: copy + delete
+          if (e.kind === 'file') {
+            const f    = await e.handle.getFile();
+            const dest = await this.currentHandle.getFileHandle(newName, { create: true });
+            const w    = await dest.createWritable();
+            await f.stream().pipeTo(w);
+            await this.currentHandle.removeEntry(e.name);
+          } else {
+            await this._recursiveCopy(e.handle, this.currentHandle, newName);
+            await this.currentHandle.removeEntry(e.name, { recursive: true });
+          }
+        }
+        this.marked.delete(e.name);
+        showToast(`Renamed to "${newName}".`, 'success');
+        await this.refreshDirectory();
+      } catch (err) {
+        showToast(`Rename failed: ${err.message}`, 'error');
+      }
+    }, true); // selectAll=true
+  }
+
+  /* ─── BROWSE (W) ─────────────────────────────────────────── */
+
+  async _browse() {
+    const e = this.entries[this.cursorIndex];
+    if (!e || e.isDot || e.isDotDot || e.kind === 'directory') {
+      showToast('Select a file to browse.', 'info');
+      return;
+    }
+    try {
+      const file = await e.handle.getFile();
+      const url  = URL.createObjectURL(file);
+      window.open(url, '_blank');
+      showToast(`Opened "${e.name}" in browser.`, 'info');
+    } catch (err) {
+      showToast(`Browse failed: ${err.message}`, 'error');
+    }
+  }
+
+  /* ─── FILTER ─────────────────────────────────────────────── */
+
+  _openFilter() {
+    const cur = this.filterRegex ? this.filterRegex.source : '';
+    this._openMini('Filter (regex):', cur, async pattern => {
+      if (!pattern) {
+        this.filterRegex = null;
+        showToast('Filter cleared.', 'info');
+      } else {
+        try {
+          this.filterRegex = new RegExp(pattern, 'i');
+          showToast(`Filter: /${pattern}/i`, 'info', 2000);
+        } catch {
+          showToast('Invalid regex.', 'error');
+          return;
+        }
+      }
+      this.cursorIndex = 0;
+      await this.refreshDirectory();
+    });
+  }
+
+  /* ─── MINIBUFFER ─────────────────────────────────────────── */
+
+  _openMini(label, defaultVal, callback, selectAll = false) {
+    this.$miniLbl.textContent = label;
+    this.$miniInp.value = defaultVal;
+    this.$mini.classList.add('active');
+    this.isInputActive = true;
+    this.inputCallback = callback;
+    this.$miniInp.focus();
+    if (selectAll) {
+      this.$miniInp.select();
+    } else {
+      // place cursor at end
+      const len = defaultVal.length;
+      this.$miniInp.setSelectionRange(len, len);
+    }
+  }
+
+  _closeMini(accept) {
+    const val = this.$miniInp.value.trim();
+    this.$mini.classList.remove('active');
+    this.isInputActive = false;
+    const cb = this.inputCallback;
+    this.inputCallback = null;
+    if (accept && cb) cb(val);
+  }
+
+  _bindMini() {
+    this.$miniInp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this._closeMini(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        this._closeMini(false);
+        showToast('Cancelled.', 'info', 1500);
+      }
+    });
+  }
+
+  /* ─── HELP ───────────────────────────────────────────────── */
+
+  _toggleHelp() {
+    const o = document.getElementById('help-overlay');
+    o.classList.toggle('visible');
+  }
+
+  /* ─── KEY BINDINGS ───────────────────────────────────────── */
+
+  _bindKeys() {
+    document.addEventListener('keydown', async e => {
+      // Pass through if minibuffer is active
+      if (this.isInputActive) return;
+
+      // EC #11 — all state mutations synchronous; async ops guarded
+      const key   = e.key;
+      const shift = e.shiftKey;
+
+      // Help overlay intercept
+      const helpVisible = document.getElementById('help-overlay').classList.contains('visible');
+      if (helpVisible) {
+        if (key === 'Escape' || key === '?') { e.preventDefault(); this._toggleHelp(); }
+        return;
+      }
+
+      // No directory loaded yet
+      if (!this.currentHandle) return;
+
+      switch (key) {
+        /* Navigation */
+        case 'j': case 'ArrowDown': e.preventDefault(); this._cursorDown(); break;
+        case 'k': case 'ArrowUp':   e.preventDefault(); this._cursorUp();   break;
+
+        case 'Enter':
+          e.preventDefault();
+          if (shift) { await this._goUp(); }             // S-Enter = dired-jump
+          else       { await this._openEntry(); }
+          break;
+
+        case 'g':
+          e.preventDefault();
+          this.filterRegex = null; // revert clears filter
+          await this.refreshDirectory();
+          break;
+
+        /* Marking */
+        case 'm':   e.preventDefault(); this._toggleMark(); break;
+        case ' ':   e.preventDefault(); this._toggleMark(); break;
+        case 'u':   e.preventDefault(); this._unmark();     break;
+        case 'U':   e.preventDefault(); this._unmarkAll();  break;
+        case 'd':   e.preventDefault(); this._toggleFlag(); break;
+        case 'x':   e.preventDefault(); await this._executeDelete(); break;
+
+        /* Creation & ops */
+        case '+':   e.preventDefault(); await this._createDir();  break;
+        case "'":   e.preventDefault(); await this._createFile(); break;
+
+        case 'y': case 'C':
+          if (key === 'C' && !shift) break; // only shift-C
+          e.preventDefault(); this._yankCopy(); break;
+        case 'M':   e.preventDefault(); this._yankMove(); break;
+        case 'p':   e.preventDefault(); await this._paste();  break;
+        case 'R':   e.preventDefault(); await this._rename(); break;
+
+        /* Toggles */
+        case '(':   e.preventDefault(); this.detailsMode = !this.detailsMode; this._render(); break;
+        case ')':   e.preventDefault(); this.iconsMode   = !this.iconsMode;   this._render(); break;
+        case '0':   e.preventDefault(); this.omitMode    = !this.omitMode; await this.refreshDirectory(); break;
+        case 'T':   e.preventDefault();
+          this.deleteByTrashing = !this.deleteByTrashing;
+          showToast(this.deleteByTrashing ? 'Trash mode ON' : 'Permanent delete mode ON', 'info');
+          this._updateStatus();
+          break;
+
+        case 'W':   e.preventDefault(); await this._browse();      break;
+        case '/':   e.preventDefault(); this._openFilter();        break;
+        case 's':   e.preventDefault(); await this._cycleSort();   break;
+        case '?':   e.preventDefault(); this._toggleHelp();        break;
+        case 'q':   e.preventDefault(); location.reload();         break;
+      }
+    });
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   BOOTSTRAP
+════════════════════════════════════════════════════════════════ */
+
+const dired = new Dired();
+document.getElementById('grant-btn').addEventListener('click', () => dired.grantAccess());
+</script>
+</body>
+</html>

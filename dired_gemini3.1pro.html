@@ -1,0 +1,845 @@
+<!-- jsDired Mix v1.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>jsDired</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+    :root {
+        --bg: #1a1b26;
+        --bg-dark: #16161e;
+        --fg: #a9b1d6;
+        --fg-dim: #565f89;
+        --blue: #7aa2f7;
+        --cyan: #7dcfff;
+        --green: #9ece6a;
+        --orange: #ff9e64;
+        --red: #f7768e;
+        --magenta: #bb9af7;
+        --cursor-bg: #3b4261;
+        --border: #292e42;
+        --font: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+        background-color: var(--bg);
+        color: var(--fg);
+        font-family: var(--font);
+        font-size: 14px;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    #landing {
+        position: fixed; inset: 0;
+        background: var(--bg-dark);
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        z-index: 1000;
+    }
+    
+    #landing h1 { color: var(--blue); margin-bottom: 2rem; font-size: 3rem; }
+    #btn-grant {
+        background: var(--blue); color: var(--bg-dark);
+        border: none; padding: 1rem 2rem; font-size: 1.2rem;
+        font-family: var(--font); cursor: pointer; border-radius: 4px;
+        font-weight: bold;
+    }
+    #btn-grant:hover { background: var(--cyan); }
+
+    #header {
+        background: var(--bg-dark); padding: 0.5rem 1rem;
+        display: flex; justify-content: space-between;
+        border-bottom: 1px solid var(--border);
+        font-weight: bold;
+    }
+
+    #main {
+        flex: 1; display: flex; flex-direction: column;
+        overflow-y: auto; position: relative;
+    }
+
+    .row {
+        display: flex; padding: 0.2rem 1rem;
+        border-bottom: 1px solid transparent;
+    }
+    
+    .row.header-row {
+        position: sticky; top: 0;
+        background: var(--bg); color: var(--fg-dim);
+        border-bottom: 1px solid var(--border);
+        font-weight: bold; z-index: 10;
+    }
+
+    .row-cursor { background: var(--cursor-bg) !important; font-weight: bold; }
+
+    .col-m { width: 30px; flex-shrink: 0; }
+    .col-icon { width: 30px; flex-shrink: 0; text-align: center; }
+    .col-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .col-size { width: 100px; flex-shrink: 0; text-align: right; white-space: nowrap; }
+    .col-mtime { width: 150px; flex-shrink: 0; text-align: right; white-space: nowrap; }
+
+    .dir-name { color: var(--blue); }
+    .type-special { color: var(--magenta); }
+    .mark-star { color: var(--orange); }
+    .mark-flag { color: var(--red); }
+
+    .hide-details .col-size, .hide-details .col-mtime { display: none; }
+    .hide-icons .col-icon { display: none; }
+
+    #minibuffer {
+        position: absolute; bottom: 30px; left: 0; right: 0;
+        background: var(--bg-dark); padding: 0.5rem 1rem;
+        border-top: 1px solid var(--border);
+        display: none; align-items: center; z-index: 50;
+    }
+    #mini-label { color: var(--cyan); margin-right: 1rem; white-space: nowrap; }
+    #mini-input {
+        flex: 1; background: transparent; color: var(--fg);
+        border: none; outline: none; font-family: var(--font);
+        font-size: 14px;
+    }
+
+    #footer {
+        background: var(--bg-dark); padding: 0.5rem 1rem;
+        border-top: 1px solid var(--border);
+        display: flex; justify-content: space-between;
+        font-size: 0.9em; height: 30px; align-items: center;
+    }
+
+    .pill {
+        padding: 0.1rem 0.5rem; border-radius: 4px; font-weight: bold;
+        color: var(--bg-dark);
+    }
+    .pill.normal { background: var(--green); }
+    .pill.dired { background: var(--orange); }
+
+    #toast-container {
+        position: fixed; top: 1rem; right: 1rem; z-index: 2000;
+        display: flex; flex-direction: column; gap: 0.5rem;
+    }
+    .toast {
+        background: var(--bg-dark); color: var(--fg);
+        padding: 1rem; border-left: 4px solid var(--blue);
+        border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        animation: slideIn 0.3s ease-out; max-width: 300px;
+    }
+    .toast.error { border-left-color: var(--red); }
+    .toast.success { border-left-color: var(--green); }
+    @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+    #loading {
+        position: absolute; inset: 0;
+        background: rgba(26, 27, 38, 0.7);
+        display: none; flex-direction: column;
+        align-items: center; justify-content: center;
+        z-index: 100;
+    }
+    .spinner {
+        width: 40px; height: 40px; border: 4px solid var(--fg-dim);
+        border-top: 4px solid var(--blue); border-radius: 50%;
+        animation: spin 1s linear infinite; margin-bottom: 1rem;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+</style>
+</head>
+<body>
+
+<div id="landing">
+    <h1>jsDired</h1>
+    <button id="btn-grant">Grant Access</button>
+</div>
+
+<div id="header">
+    <span id="header-path">/</span>
+    <span id="header-sort">Sort: Name</span>
+</div>
+
+<div id="main">
+    <div class="row header-row" id="col-headers">
+        <div class="col-m">M</div>
+        <div class="col-icon"></div>
+        <div class="col-name">Name</div>
+        <div class="col-size">Size</div>
+        <div class="col-mtime">Modified</div>
+    </div>
+    <div id="entries-container"></div>
+    
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>Working...</div>
+    </div>
+</div>
+
+<div id="minibuffer">
+    <span id="mini-label"></span>
+    <input type="text" id="mini-input" autocomplete="off" spellcheck="false">
+</div>
+
+<div id="footer">
+    <div id="footer-left"></div>
+    <div id="footer-right">
+        <span id="yank-status"></span>
+        <span id="mode-pill" class="pill normal">NORMAL</span>
+    </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+class Dired {
+    constructor() {
+        this.rootHandle = null;
+        this.currentHandle = null;
+        this.pathSegments = []; // Array<{ handle, name }>
+        this.entries = []; // Array<{ handle, name, kind, size, mtime, isDot, isDotDot }>
+        this.cursorIndex = 0;
+        this.marked = new Set();
+        this.flagged = new Set();
+        this.clipboard = { action: null, items: [], sourceHandle: null };
+        this.filterRegex = null;
+        this.sortBy = 'name'; // 'name', 'size', 'mtime'
+        
+        this.loading = false;
+        this.isInputActive = false;
+        this.inputCallback = null;
+
+        // Toggles
+        this.detailsMode = false;
+        this.iconsMode = true;
+        this.omitMode = true; // hidden files hidden
+
+        this.initDOM();
+        this.bindEvents();
+    }
+
+    initDOM() {
+        this.elLanding = document.getElementById('landing');
+        this.btnGrant = document.getElementById('btn-grant');
+        this.elHeaderPath = document.getElementById('header-path');
+        this.elHeaderSort = document.getElementById('header-sort');
+        this.elEntries = document.getElementById('entries-container');
+        this.elMain = document.getElementById('main');
+        
+        this.elMini = document.getElementById('minibuffer');
+        this.elMiniLabel = document.getElementById('mini-label');
+        this.elMiniInput = document.getElementById('mini-input');
+        
+        this.elFooterLeft = document.getElementById('footer-left');
+        this.elModePill = document.getElementById('mode-pill');
+        this.elYankStatus = document.getElementById('yank-status');
+        this.elLoading = document.getElementById('loading');
+        this.elToastContainer = document.getElementById('toast-container');
+        
+        this.updateTogglesUI();
+    }
+
+    bindEvents() {
+        this.btnGrant.addEventListener('click', () => this.boot());
+        
+        document.addEventListener('keydown', async (e) => {
+            if (this.isInputActive) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.closeMini(this.elMiniInput.value);
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.closeMini(null);
+                }
+                return;
+            }
+            
+            if (this.loading) { e.preventDefault(); return; } // Edge #11: Rapid keys blocked if loading
+
+            if (e.ctrlKey || e.altKey || e.metaKey) return; // ignore browser shortcuts mostly
+
+            let handled = true;
+            switch(e.key) {
+                case 'j': case 'ArrowDown': this.moveCursor(1); break;
+                case 'k': case 'ArrowUp': this.moveCursor(-1); break;
+                case 'Enter': 
+                    if (e.shiftKey) this.goUp();
+                    else this.enterItem();
+                    break;
+                case 'g': await this.refreshDirectory(); break;
+                case 'm': case ' ': this.toggleMark(); break;
+                case 'u': this.unmark(); break;
+                case 'U': this.marked.clear(); this.flagged.clear(); this.renderCursorAndFooter(); break;
+                case 'd': this.toggleFlag(); break;
+                case 'x': await this.deleteItems(); break;
+                case '+': this.createItem('directory'); break;
+                case "'": this.createItem('file'); break;
+                case 'y': case 'C': this.copyItems(false); break;
+                case 'M': this.copyItems(true); break;
+                case 'p': await this.pasteItems(); break;
+                case 'R': await this.renameItem(); break;
+                case '(': this.detailsMode = !this.detailsMode; this.updateTogglesUI(); break;
+                case ')': this.iconsMode = !this.iconsMode; this.updateTogglesUI(); break;
+                case '0': this.omitMode = !this.omitMode; await this.refreshDirectory(); break;
+                case 'W': this.browseCurrent(); break;
+                case '/': 
+                    this.openMini('Filter (Regex):', this.filterRegex ? this.filterRegex.source : '', val => {
+                        if(val !== null) {
+                            try { this.filterRegex = val ? new RegExp(val, 'i') : null; this.refreshDirectory(); }
+                            catch(err) { this.showToast('Invalid Regex', 'error'); }
+                        }
+                    });
+                    break;
+                case 's': 
+                    this.sortBy = this.sortBy === 'name' ? 'size' : (this.sortBy === 'size' ? 'mtime' : 'name');
+                    this.elHeaderSort.textContent = `Sort: ${this.sortBy.charAt(0).toUpperCase() + this.sortBy.slice(1)}`;
+                    await this.refreshDirectory(); 
+                    break;
+                case '?': this.showHelp(); break;
+                case 'q': location.reload(); break;
+                default: handled = false;
+            }
+            if(handled) e.preventDefault();
+        });
+    }
+
+    async boot() {
+        try {
+            // Edge #12: User cancels directory picker
+            this.rootHandle = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'downloads' }).catch(async e => {
+                return await window.showDirectoryPicker({ mode: 'readwrite' });
+            });
+            this.currentHandle = this.rootHandle;
+            this.pathSegments = [{ handle: this.rootHandle, name: this.rootHandle.name }];
+            this.elLanding.style.display = 'none';
+            await this.refreshDirectory();
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                this.showToast('Picker cancelled', 'info');
+            } else {
+                this.showToast(error.message, 'error');
+            }
+        }
+    }
+
+    async refreshDirectory() {
+        if (this.loading) return; // Edge #9: Refresh while operation in progress
+        let tId = setTimeout(() => { this.elLoading.style.display = 'flex'; }, 150); // Threshold loading
+        this.loading = true;
+
+        try {
+            const rawEntries = [];
+            rawEntries.push({ handle: this.currentHandle, name: '.', kind: 'directory', isDot: true });
+            
+            if (this.pathSegments.length > 1) {
+                rawEntries.push({ handle: this.pathSegments[this.pathSegments.length - 2].handle, name: '..', kind: 'directory', isDotDot: true });
+            }
+
+            const handles = [];
+            for await (const [name, handle] of this.currentHandle.entries()) {
+                handles.push({ name, handle });
+            }
+
+            // Edge #1: Dir with 1000+ files. Fetching stats for all at once might be heavy.
+            // We batch them if necessary, but Promise.all is okay for now.
+            const statsPromises = handles.map(async ({name, handle}) => {
+                let size = null, mtime = null;
+                if (handle.kind === 'file') {
+                    try {
+                        const file = await handle.getFile();
+                        size = file.size;
+                        mtime = file.lastModified;
+                    } catch(e) { size = 0; }
+                }
+                return { handle, name, kind: handle.kind, size, mtime };
+            });
+
+            const processedEntries = await Promise.all(statsPromises);
+            rawEntries.push(...processedEntries);
+
+            // Filter
+            this.entries = rawEntries.filter(e => {
+                if(e.isDot || e.isDotDot) return true;
+                if(this.omitMode && e.name.startsWith('.')) return false; // Edge #6: Hidden files
+                if(this.filterRegex && !this.filterRegex.test(e.name)) return false;
+                return true;
+            });
+
+            this.sortItems();
+            
+            if(this.cursorIndex >= this.entries.length) this.cursorIndex = Math.max(0, this.entries.length - 1);
+            
+            this.render();
+        } catch(e) {
+            this.showToast(e.message, 'error');
+        } finally {
+            clearTimeout(tId);
+            this.elLoading.style.display = 'none';
+            // Debounce lock release
+            setTimeout(() => { this.loading = false; }, 50); 
+        }
+    }
+
+    sortItems() {
+        this.entries.sort((a, b) => {
+            if(a.isDot) return -1; if(b.isDot) return 1;
+            if(a.isDotDot) return -1; if(b.isDotDot) return 1;
+            
+            if(a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
+
+            if(this.sortBy === 'name') return a.name.localeCompare(b.name);
+            if(this.sortBy === 'size') return (b.size || 0) - (a.size || 0);
+            if(this.sortBy === 'mtime') return (b.mtime || 0) - (a.mtime || 0);
+            return 0;
+        });
+    }
+
+    render() {
+        this.elHeaderPath.textContent = this.pathSegments.map(s => s.name).join(' / ');
+        
+        // Edge #1: Building a single HTML string is faster than DOM append loops
+        let html = '';
+        this.entries.forEach((e, idx) => {
+            let mChar = ' ';
+            let rowClass = 'row';
+            let markClass = '';
+            
+            if(this.flagged.has(e.name)) { mChar = 'D'; markClass = 'mark-flag'; }
+            else if(this.marked.has(e.name)) { mChar = '*'; markClass = 'mark-star'; }
+
+            let nameClass = e.kind === 'directory' ? 'dir-name' : '';
+            if(e.isDot || e.isDotDot) nameClass = 'type-special';
+            
+            let displayName = this.escapeHTML(e.name) + (e.kind === 'directory' ? '/' : ''); // Edge #2
+            let icon = e.kind === 'directory' ? '📁' : this.getFileIcon(e.name);
+            
+            let sizeStr = e.size !== null ? this.formatSize(e.size) : '-';
+            let dateStr = e.mtime !== null ? this.formatDate(e.mtime) : '-';
+
+            html += `<div class="${rowClass}" id="row-${idx}">
+                <div class="col-m ${markClass}">${mChar}</div>
+                <div class="col-icon">${icon}</div>
+                <div class="col-name ${nameClass}" title="${this.escapeHTML(e.name)}">${displayName}</div>
+                <div class="col-size">${sizeStr}</div>
+                <div class="col-mtime">${dateStr}</div>
+            </div>`;
+        });
+        
+        // Edge #5: Empty dir handles gracefully by just showing dots
+        this.elEntries.innerHTML = html;
+        this.updateCursorVisuals();
+        this.renderFooter();
+    }
+
+    // Edge #1: Update classes instead of re-rendering DOM
+    updateCursorVisuals() {
+        const old = document.querySelector('.row-cursor');
+        if(old) old.classList.remove('row-cursor');
+        const next = document.getElementById(`row-${this.cursorIndex}`);
+        if(next) {
+            next.classList.add('row-cursor');
+            next.scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    renderCursorAndFooter() {
+        this.updateCursorVisuals();
+        this.renderFooter();
+        
+        // Update marks in DOM without full render
+        this.entries.forEach((e, idx) => {
+            const row = document.getElementById(`row-${idx}`);
+            if(!row) return;
+            const mCol = row.querySelector('.col-m');
+            if(this.flagged.has(e.name)) { mCol.textContent = 'D'; mCol.className = 'col-m mark-flag'; }
+            else if(this.marked.has(e.name)) { mCol.textContent = '*'; mCol.className = 'col-m mark-star'; }
+            else { mCol.textContent = ' '; mCol.className = 'col-m'; }
+        });
+    }
+
+    renderFooter() {
+        const total = this.entries.length;
+        const mCount = this.marked.size;
+        const fCount = this.flagged.size;
+        this.elFooterLeft.textContent = `Entries: ${total} | Marked: ${mCount} | Flagged: ${fCount}`;
+        
+        if (mCount > 0 || fCount > 0) {
+            this.elModePill.textContent = 'DIRED';
+            this.elModePill.className = 'pill dired';
+        } else {
+            this.elModePill.textContent = 'NORMAL';
+            this.elModePill.className = 'pill normal';
+        }
+        
+        if (this.clipboard.items.length > 0) {
+            this.elYankStatus.textContent = `[${this.clipboard.action === 'move' ? 'Move' : 'Copy'} Active: ${this.clipboard.items.length}]`;
+        } else {
+            this.elYankStatus.textContent = '';
+        }
+    }
+
+    updateTogglesUI() {
+        if(this.detailsMode) this.elMain.classList.remove('hide-details');
+        else this.elMain.classList.add('hide-details');
+        
+        if(this.iconsMode) this.elMain.classList.remove('hide-icons');
+        else this.elMain.classList.add('hide-icons');
+    }
+
+    // --- NAVIGATION ---
+
+    moveCursor(delta) {
+        this.cursorIndex += delta;
+        if(this.cursorIndex < 0) this.cursorIndex = 0;
+        if(this.cursorIndex >= this.entries.length) this.cursorIndex = this.entries.length - 1;
+        this.updateCursorVisuals();
+    }
+
+    async enterItem() {
+        const item = this.entries[this.cursorIndex];
+        if(!item) return;
+        if(item.isDot) { await this.refreshDirectory(); return; }
+        if(item.isDotDot) { this.goUp(); return; }
+        
+        if(item.kind === 'directory') {
+            this.pathSegments.push({ handle: item.handle, name: item.name });
+            this.currentHandle = item.handle;
+            this.filterRegex = null; // Contextual reset
+            this.cursorIndex = 0;
+            this.marked.clear(); this.flagged.clear();
+            await this.refreshDirectory();
+        } else {
+            this.browseCurrent();
+        }
+    }
+
+    async goUp() {
+        if(this.pathSegments.length <= 1) return;
+        this.pathSegments.pop();
+        this.currentHandle = this.pathSegments[this.pathSegments.length - 1].handle;
+        this.filterRegex = null;
+        this.cursorIndex = 0;
+        this.marked.clear(); this.flagged.clear();
+        await this.refreshDirectory();
+    }
+
+    // --- MARKING ---
+
+    toggleMark() {
+        const item = this.entries[this.cursorIndex];
+        if(!item || item.isDot || item.isDotDot) {
+            if(item && (item.isDot || item.isDotDot)) this.showToast('Cannot operate on special entries', 'error'); // Edge #3
+            return;
+        }
+        if(this.marked.has(item.name)) this.marked.delete(item.name);
+        else { this.marked.add(item.name); this.flagged.delete(item.name); }
+        this.moveCursor(1);
+        this.renderCursorAndFooter();
+    }
+
+    unmark() {
+        const item = this.entries[this.cursorIndex];
+        if(!item) return;
+        this.marked.delete(item.name);
+        this.flagged.delete(item.name);
+        this.moveCursor(1);
+        this.renderCursorAndFooter();
+    }
+
+    toggleFlag() {
+        const item = this.entries[this.cursorIndex];
+        if(!item || item.isDot || item.isDotDot) {
+             if(item && (item.isDot || item.isDotDot)) this.showToast('Cannot operate on special entries', 'error');
+             return;
+        }
+        if(this.flagged.has(item.name)) this.flagged.delete(item.name);
+        else { this.flagged.add(item.name); this.marked.delete(item.name); }
+        this.moveCursor(1);
+        this.renderCursorAndFooter();
+    }
+
+    getOperationTargets(preferFlagged = false) {
+        if (preferFlagged && this.flagged.size > 0) {
+            return this.entries.filter(e => this.flagged.has(e.name));
+        }
+        if (this.marked.size > 0) {
+            return this.entries.filter(e => this.marked.has(e.name));
+        }
+        const current = this.entries[this.cursorIndex];
+        if (current && !current.isDot && !current.isDotDot) return [current];
+        return [];
+    }
+
+    // --- OPERATIONS ---
+
+    async deleteItems() {
+        const targets = this.getOperationTargets(true); // x prioritizes flags
+        if(targets.length === 0) return;
+        
+        if(!confirm(`Delete ${targets.length} item(s)?`)) return;
+
+        this.elLoading.style.display = 'flex';
+        this.loading = true;
+        let errors = 0;
+        try {
+            for(const t of targets) {
+                try {
+                    await this.currentHandle.removeEntry(t.name, { recursive: true });
+                } catch(e) {
+                    errors++; // Edge #4: Permission denied mid-operation
+                    console.error(e);
+                }
+            }
+            this.flagged.clear();
+            this.marked.clear();
+            if(errors > 0) this.showToast(`Deleted with ${errors} errors`, 'error');
+            else this.showToast('Deleted successfully', 'success');
+        } finally {
+            this.elLoading.style.display = 'none';
+            this.loading = false;
+            await this.refreshDirectory();
+        }
+    }
+
+    createItem(kind) {
+        this.openMini(`New ${kind} name:`, '', async (name) => {
+            if(!name) return;
+            this.loading = true;
+            try {
+                if(kind === 'directory') await this.currentHandle.getDirectoryHandle(name, { create: true });
+                else await this.currentHandle.getFileHandle(name, { create: true });
+                this.showToast('Created', 'success');
+            } catch(e) {
+                this.showToast(e.message, 'error');
+            } finally {
+                this.loading = false;
+                await this.refreshDirectory();
+            }
+        });
+    }
+
+    async renameItem() {
+        const targets = this.getOperationTargets();
+        if(targets.length === 0) return;
+        
+        if(targets.length > 1) {
+            // Re-route to move
+            this.copyItems(true);
+            return;
+        }
+
+        const item = targets[0];
+        this.openMini('Rename:', item.name, async (newName) => {
+            if(!newName || newName === item.name) return;
+            this.loading = true;
+            try {
+                if(item.handle.move) {
+                    // Try native move if available (Chrome >= 114)
+                    await item.handle.move(newName);
+                } else {
+                    // Fallback to copy+delete for files
+                    if(item.kind === 'file') {
+                        const newHandle = await this.currentHandle.getFileHandle(newName, {create:true});
+                        const writable = await newHandle.createWritable();
+                        const file = await item.handle.getFile();
+                        await file.stream().pipeTo(writable);
+                        await this.currentHandle.removeEntry(item.name);
+                    } else {
+                        throw new Error("Native rename not supported for directories on this browser.");
+                    }
+                }
+            } catch(e) {
+                this.showToast(e.message, 'error');
+            } finally {
+                this.loading = false;
+                await this.refreshDirectory();
+            }
+        });
+    }
+
+    copyItems(moveMode) {
+        const targets = this.getOperationTargets();
+        if(targets.length === 0) return;
+        this.clipboard = {
+            action: moveMode ? 'move' : 'copy',
+            items: targets.map(t => ({ handle: t.handle, name: t.name, kind: t.kind })),
+            sourceHandle: this.currentHandle
+        };
+        this.showToast(`Yanked ${targets.length} items for ${this.clipboard.action}`, 'info');
+        this.renderFooter();
+    }
+
+    async pasteItems() {
+        if(this.clipboard.items.length === 0) return;
+        
+        this.loading = true;
+        this.elLoading.style.display = 'flex';
+        let errors = 0;
+        try {
+            const destHandle = this.currentHandle;
+            const isSameDir = await destHandle.isSameEntry(this.clipboard.sourceHandle);
+            
+            if (this.clipboard.action === 'move' && isSameDir) {
+                throw new Error("Cannot move to the same directory");
+            }
+
+            for(const item of this.clipboard.items) {
+                try {
+                    let newName = item.name;
+                    if(isSameDir && this.clipboard.action === 'copy') {
+                        newName = await this.getUniqueName(destHandle, item.name, item.kind === 'directory'); // Edge #8
+                    }
+                    
+                    // Edge #7: Recursive copy
+                    await this.recursiveCopy(item.handle, destHandle, newName);
+                    
+                    if(this.clipboard.action === 'move') {
+                        await this.clipboard.sourceHandle.removeEntry(item.name, { recursive: true });
+                    }
+                } catch(e) {
+                    console.error("Paste error", e);
+                    errors++;
+                }
+            }
+            
+            if(this.clipboard.action === 'move') {
+                this.clipboard = { action: null, items: [], sourceHandle: null }; // clear after move
+            }
+            if(errors > 0) this.showToast(`Pasted with ${errors} errors`, 'error');
+            else this.showToast('Pasted successfully', 'success');
+            
+        } catch(e) {
+            this.showToast(e.message, 'error');
+        } finally {
+            this.elLoading.style.display = 'none';
+            this.loading = false;
+            await this.refreshDirectory();
+        }
+    }
+
+    async recursiveCopy(srcHandle, destParent, newName) {
+        const finalName = newName || srcHandle.name;
+        if(srcHandle.kind === 'file') {
+            const file = await srcHandle.getFile();
+            const newFileHandle = await destParent.getFileHandle(finalName, { create: true });
+            const writable = await newFileHandle.createWritable();
+            await file.stream().pipeTo(writable); // Edge #12: Stream copy handles large files without memory bloat
+        } else {
+            const newDirHandle = await destParent.getDirectoryHandle(finalName, { create: true });
+            for await (const [name, handle] of srcHandle.entries()) {
+                await this.recursiveCopy(handle, newDirHandle);
+            }
+        }
+    }
+
+    async getUniqueName(parentHandle, baseName, isDir) {
+        let name = baseName;
+        while(true) {
+            try {
+                if(isDir) await parentHandle.getDirectoryHandle(name);
+                else await parentHandle.getFileHandle(name);
+                name = 'copy_of_' + name;
+            } catch(e) {
+                if(e.name === 'NotFoundError') return name;
+                throw e;
+            }
+        }
+    }
+
+    async browseCurrent() {
+        const item = this.entries[this.cursorIndex];
+        if(!item || item.kind !== 'file') return;
+        try {
+            const file = await item.handle.getFile();
+            const url = URL.createObjectURL(file);
+            window.open(url, '_blank');
+            setTimeout(() => URL.revokeObjectURL(url), 10000); // cleanup
+        } catch(e) {
+            this.showToast('Failed to open file', 'error');
+        }
+    }
+
+    // --- UTILS ---
+
+    openMini(prompt, defaultVal, callback) {
+        this.isInputActive = true;
+        this.inputCallback = callback;
+        this.elMiniLabel.textContent = prompt;
+        this.elMiniInput.value = defaultVal;
+        this.elMini.style.display = 'flex';
+        this.elMiniInput.focus();
+        this.elMiniInput.select();
+    }
+
+    closeMini(val) {
+        this.isInputActive = false;
+        this.elMini.style.display = 'none';
+        if(this.inputCallback) {
+            const cb = this.inputCallback;
+            this.inputCallback = null;
+            cb(val);
+        }
+    }
+
+    showToast(msg, type='info') {
+        const t = document.createElement('div');
+        t.className = `toast ${type}`;
+        t.textContent = msg;
+        this.elToastContainer.appendChild(t);
+        setTimeout(() => {
+            t.style.opacity = '0';
+            setTimeout(() => t.remove(), 300);
+        }, 3500);
+    }
+
+    escapeHTML(str) {
+        return str.replace(/[&<>'"]/g, tag => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+        }[tag]));
+    }
+
+    formatSize(bytes) {
+        if(bytes === 0) return '0 B';
+        const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    formatDate(ms) {
+        const d = new Date(ms);
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const pad = (n) => n.toString().padStart(2, '0');
+        return `${pad(d.getDate())} ${months[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    getFileIcon(name) {
+        const ext = name.split('.').pop().toLowerCase();
+        const map = {
+            'js': '📜', 'html': '🌐', 'css': '🎨', 'md': '📝', 'txt': '📄',
+            'png': '🖼️', 'jpg': '🖼️', 'jpeg': '🖼️', 'gif': '🖼️',
+            'pdf': '📕', 'zip': '📦', 'json': '{}'
+        };
+        return map[ext] || '📄';
+    }
+
+    showHelp() {
+        this.showToast('Check console for keybindings', 'info');
+        console.log(`
+Nav: j/k, S-Enter(up), g(refresh)
+Mark: m/SPC, u(unmark), U(unmark all), d(flag), x(delete)
+Ops: +, ', y(copy), M(move), p(paste), R(rename)
+Utils: (, ), 0, W, /, s, ?, q
+        `);
+    }
+}
+
+// Boot
+window.onload = () => {
+    window.diredApp = new Dired();
+};
+</script>
+</body>
+</html>
