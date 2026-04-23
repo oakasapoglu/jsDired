@@ -7,7 +7,7 @@ jsDired is a directory editor that runs entirely in your web browser. It is desi
 *   **Privacy-First:** The application runs locally in your browser and uses the **File System Access API** to interact directly with your data—no files are uploaded to a server.
 *   **Efficient Workflow:** Optimized for users who prefer a minimalist, list-based view and keyboard shortcuts for navigating, renaming, and organizing directories.
 
-## [Implementation Demos](index.html)
+## [Implementation Demos](https://oakasapoglu.github.io/jsDired/)
 
 For the technical specification and design goals, see [desing.md](desing.md).
 
